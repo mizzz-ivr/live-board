@@ -2,71 +2,84 @@ import { startObsBridge } from '@live-board/obs-bridge';
 import { access, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { performance } from 'node:perf_hooks';
 import { createWorkspacePersistenceService } from './persistence-service.js';
 import {
   resolvePackagedResourcePaths,
   type PackagedResourcePaths,
 } from './packaged-resources.js';
 
+const MAX_SMOKE_ITERATIONS = 500;
+
 export interface PackagedSmokeTestResult {
   ok: true;
   version: string;
+  iterations: number;
   host: '127.0.0.1' | '::1';
   port: number;
   overlayStatus: number;
+  firstRssBytes: number;
+  lastRssBytes: number;
+  maxRssBytes: number;
+  rssGrowthBytes: number;
+  maxIterationDurationMs: number;
+  p95IterationDurationMs: number;
 }
 
 export interface RunPackagedSmokeTestOptions {
   currentDirectory: string;
   resourcesPath: string;
   version: string;
+  iterations?: number;
+}
+
+interface SmokeIterationResult {
+  host: '127.0.0.1' | '::1';
+  port: number;
+  overlayStatus: number;
 }
 
 export async function runPackagedSmokeTest(
   options: RunPackagedSmokeTestOptions,
 ): Promise<PackagedSmokeTestResult> {
+  const iterations = validateIterations(options.iterations ?? 1);
   const paths = resolvePackagedResourcePaths(
     options.currentDirectory,
     options.resourcesPath,
   );
   await assertPackagedResources(paths);
 
-  const smokeRoot = await mkdtemp(join(tmpdir(), 'live-board-packaged-smoke-'));
-  const persistenceService = createWorkspacePersistenceService(
-    join(smokeRoot, 'persistence'),
-  );
-  await persistenceService.initialize();
+  const durations: number[] = [];
+  const rssSamples: number[] = [];
+  let latest: SmokeIterationResult | undefined;
 
-  const bridge = await startObsBridge({
-    allowedOrigins: [],
-    overlayRoot: paths.overlayRoot,
-  });
-
-  try {
-    const response = await fetch(bridge.info.overlayUrl, {
-      redirect: 'error',
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!response.ok) {
-      throw new Error(`PACKAGED_SMOKE_OVERLAY_HTTP_${response.status}`);
-    }
-
-    const html = await response.text();
-    if (!/id=["']root["']/.test(html)) {
-      throw new Error('PACKAGED_SMOKE_OVERLAY_ROOT_MISSING');
-    }
-
-    return {
-      ok: true,
-      version: options.version,
-      host: bridge.info.host,
-      port: bridge.info.port,
-      overlayStatus: response.status,
-    };
-  } finally {
-    await bridge.close();
-    await rm(smokeRoot, { recursive: true, force: true });
+  for (let iteration = 0; iteration < iterations; iteration += 1) {
+    const startedAt = performance.now();
+    latest = await runSmokeIteration(paths);
+    durations.push(Math.max(0, Math.round(performance.now() - startedAt)));
+    rssSamples.push(process.memoryUsage().rss);
   }
+
+  if (latest === undefined || rssSamples.length === 0) {
+    throw new Error('PACKAGED_SMOKE_NO_ITERATION');
+  }
+
+  const firstRssBytes = rssSamples[0] ?? 0;
+  const lastRssBytes = rssSamples.at(-1) ?? firstRssBytes;
+  return {
+    ok: true,
+    version: options.version,
+    iterations,
+    host: latest.host,
+    port: latest.port,
+    overlayStatus: latest.overlayStatus,
+    firstRssBytes,
+    lastRssBytes,
+    maxRssBytes: Math.max(...rssSamples),
+    rssGrowthBytes: lastRssBytes - firstRssBytes,
+    maxIterationDurationMs: Math.max(...durations),
+    p95IterationDurationMs: percentile95(durations),
+  };
 }
 
 export async function writePackagedSmokeResult(
@@ -80,6 +93,49 @@ export async function writePackagedSmokeResult(
   });
 }
 
+async function runSmokeIteration(
+  paths: PackagedResourcePaths,
+): Promise<SmokeIterationResult> {
+  const smokeRoot = await mkdtemp(join(tmpdir(), 'live-board-packaged-smoke-'));
+
+  try {
+    const persistenceService = createWorkspacePersistenceService(
+      join(smokeRoot, 'persistence'),
+    );
+    await persistenceService.initialize();
+
+    const bridge = await startObsBridge({
+      allowedOrigins: [],
+      overlayRoot: paths.overlayRoot,
+    });
+
+    try {
+      const response = await fetch(bridge.info.overlayUrl, {
+        redirect: 'error',
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) {
+        throw new Error(`PACKAGED_SMOKE_OVERLAY_HTTP_${response.status}`);
+      }
+
+      const html = await response.text();
+      if (!/id=["']root["']/.test(html)) {
+        throw new Error('PACKAGED_SMOKE_OVERLAY_ROOT_MISSING');
+      }
+
+      return {
+        host: bridge.info.host,
+        port: bridge.info.port,
+        overlayStatus: response.status,
+      };
+    } finally {
+      await bridge.close();
+    }
+  } finally {
+    await rm(smokeRoot, { recursive: true, force: true });
+  }
+}
+
 async function assertPackagedResources(
   paths: PackagedResourcePaths,
 ): Promise<void> {
@@ -91,4 +147,21 @@ async function assertPackagedResources(
   } catch {
     throw new Error('PACKAGED_SMOKE_RESOURCE_MISSING');
   }
+}
+
+function validateIterations(iterations: number): number {
+  if (
+    !Number.isSafeInteger(iterations) ||
+    iterations < 1 ||
+    iterations > MAX_SMOKE_ITERATIONS
+  ) {
+    throw new Error('PACKAGED_SMOKE_ITERATIONS_INVALID');
+  }
+  return iterations;
+}
+
+function percentile95(values: readonly number[]): number {
+  const sorted = [...values].sort((left, right) => left - right);
+  const index = Math.max(0, Math.ceil(sorted.length * 0.95) - 1);
+  return sorted[index] ?? 0;
 }
