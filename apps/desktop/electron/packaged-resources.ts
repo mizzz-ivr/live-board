@@ -1,5 +1,8 @@
 import { join } from 'node:path';
 
+const DEFAULT_SMOKE_ITERATIONS = 1;
+const MAX_SMOKE_ITERATIONS = 500;
+
 export interface PackagedResourcePaths {
   rendererIndex: string;
   overlayRoot: string;
@@ -9,6 +12,7 @@ export interface PackagedResourcePaths {
 export interface PackagedSmokeArguments {
   enabled: boolean;
   outputPath: string | undefined;
+  iterations: number;
 }
 
 export function resolvePackagedResourcePaths(
@@ -34,18 +38,44 @@ export function parsePackagedSmokeArguments(
   const outputArguments = argv.filter((argument) =>
     argument.startsWith('--smoke-output='),
   );
+  const iterationArguments = argv.filter((argument) =>
+    argument.startsWith('--smoke-iterations='),
+  );
 
   if (outputArguments.length > 1) {
     throw new Error('PACKAGED_SMOKE_OUTPUT_DUPLICATED');
+  }
+  if (iterationArguments.length > 1) {
+    throw new Error('PACKAGED_SMOKE_ITERATIONS_DUPLICATED');
   }
 
   const outputPath = outputArguments[0]?.slice('--smoke-output='.length);
   if (outputArguments.length === 1 && (outputPath === undefined || outputPath.length === 0)) {
     throw new Error('PACKAGED_SMOKE_OUTPUT_INVALID');
   }
+
+  const iterations = parseSmokeIterations(iterationArguments[0]);
   if (!enabled && outputPath !== undefined) {
     throw new Error('PACKAGED_SMOKE_OUTPUT_WITHOUT_TEST');
   }
+  if (!enabled && iterationArguments.length > 0) {
+    throw new Error('PACKAGED_SMOKE_ITERATIONS_WITHOUT_TEST');
+  }
 
-  return { enabled, outputPath };
+  return { enabled, outputPath, iterations };
+}
+
+function parseSmokeIterations(argument: string | undefined): number {
+  if (argument === undefined) return DEFAULT_SMOKE_ITERATIONS;
+
+  const rawValue = argument.slice('--smoke-iterations='.length);
+  if (!/^[1-9]\d*$/.test(rawValue)) {
+    throw new Error('PACKAGED_SMOKE_ITERATIONS_INVALID');
+  }
+
+  const iterations = Number(rawValue);
+  if (!Number.isSafeInteger(iterations) || iterations > MAX_SMOKE_ITERATIONS) {
+    throw new Error('PACKAGED_SMOKE_ITERATIONS_INVALID');
+  }
+  return iterations;
 }
