@@ -59,6 +59,23 @@ LiveBoard.exe `
 
 結果JSONはソースhead SHAを含むworkflow artifact名で14日保持します。
 
+### 初回実測
+
+Windows Packaged Soak run `30142006235`、Windows Server 2025 runner、100回反復で取得しました。
+
+| 項目 | 実測 |
+|---|---:|
+| 成功反復 | 100 / 100 |
+| Overlay HTTP status | 200 |
+| 初回RSS | 75,960,320 byte（約72.44MiB） |
+| 最終RSS | 87,085,056 byte（約83.05MiB） |
+| 最大RSS | 87,085,056 byte（約83.05MiB） |
+| RSS増加 | 11,124,736 byte（約10.61MiB） |
+| 最大反復所要時間 | 68ms |
+| p95反復所要時間 | 21ms |
+
+これはGitHub-hosted runner上の値です。実利用端末、OBS、GPUドライバー、ウイルス対策ソフトを含む値ではありません。
+
 ## 5. 失敗時の確認順序
 
 1. 失敗した反復回数とエラー名を確認する
