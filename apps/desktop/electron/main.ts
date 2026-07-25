@@ -232,6 +232,7 @@ async function initializeApplication(): Promise<void> {
       currentDirectory,
       resourcesPath: process.resourcesPath,
       version: app.getVersion(),
+      iterations: smokeArguments.iterations,
     });
     if (smokeArguments.outputPath !== undefined) {
       await writePackagedSmokeResult(smokeArguments.outputPath, result);
