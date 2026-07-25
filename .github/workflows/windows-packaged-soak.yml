@@ -1,0 +1,130 @@
+name: Windows Packaged Soak
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/windows-packaged-soak.yml'
+      - 'apps/desktop/electron/main.ts'
+      - 'apps/desktop/electron/packaged-resources.ts'
+      - 'apps/desktop/electron/packaged-smoke-test.ts'
+      - 'apps/desktop/test/packaged-resources.test.ts'
+      - 'apps/desktop/test/packaged-smoke-test.test.ts'
+      - 'apps/desktop/package.json'
+      - 'apps/overlay/**'
+      - 'packages/obs-bridge/**'
+      - 'packages/persistence/**'
+      - 'pnpm-lock.yaml'
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: '反復回数（1〜500）'
+        required: false
+        default: '100'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-packaged-soak-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  soak:
+    name: Packaged lifecycle soak
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Resolve soak iterations
+        shell: pwsh
+        run: |
+          $iterations = '100'
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $iterations = '${{ inputs.iterations }}'
+          }
+          if ($iterations -notmatch '^[1-9][0-9]*$') {
+            throw 'Soak iterations must be an integer from 1 to 500.'
+          }
+          $numericIterations = [int]$iterations
+          if ($numericIterations -lt 1 -or $numericIterations -gt 500) {
+            throw 'Soak iterations must be an integer from 1 to 500.'
+          }
+          "SOAK_ITERATIONS=$numericIterations" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build unpacked Windows app
+        run: pnpm --filter @live-board/desktop package:win:dir
+
+      - name: Run packaged lifecycle soak
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path 'apps/desktop/release/win-unpacked/LiveBoard.exe'
+          $output = Join-Path $env:RUNNER_TEMP 'live-board-packaged-soak.json'
+          $process = Start-Process -FilePath $exe -ArgumentList @(
+            '--smoke-test',
+            "--smoke-output=$output",
+            "--smoke-iterations=$env:SOAK_ITERATIONS"
+          ) -PassThru
+
+          if (-not $process.WaitForExit(1200000)) {
+            $process.Kill()
+            throw 'Packaged soak test timed out after 20 minutes.'
+          }
+          if ($process.ExitCode -ne 0) {
+            throw "Packaged soak test failed with exit code $($process.ExitCode)."
+          }
+          if (-not (Test-Path $output)) {
+            throw 'Packaged soak test did not create its result file.'
+          }
+
+          $result = Get-Content $output -Raw | ConvertFrom-Json
+          if ($result.ok -ne $true) {
+            throw 'Packaged soak result did not report success.'
+          }
+          if ($result.iterations -ne [int]$env:SOAK_ITERATIONS) {
+            throw 'Packaged soak result iteration count is invalid.'
+          }
+          if ($result.overlayStatus -ne 200) {
+            throw 'Packaged soak result did not report HTTP 200.'
+          }
+          if ($result.maxIterationDurationMs -gt 15000) {
+            throw "A soak iteration exceeded 15 seconds: $($result.maxIterationDurationMs)ms."
+          }
+          if ($result.maxRssBytes -gt 1073741824) {
+            throw "Maximum RSS exceeded 1GiB: $($result.maxRssBytes) bytes."
+          }
+          if ($result.rssGrowthBytes -gt 268435456) {
+            throw "RSS growth exceeded 256MiB: $($result.rssGrowthBytes) bytes."
+          }
+
+          Get-Content $output
+          Copy-Item $output 'apps/desktop/release/packaged-soak-result.json'
+
+      - name: Upload soak result
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-board-windows-soak-${{ env.SOURCE_SHA }}
+          if-no-files-found: error
+          retention-days: 14
+          path: apps/desktop/release/packaged-soak-result.json
