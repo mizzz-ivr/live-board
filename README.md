@@ -15,7 +15,7 @@ Live Board は、配信者向けのローカル完結型リアルタイムペイ
 
 ## 現在の状態
 
-M3「保存・復旧・性能・配信操作性」に加え、画像Asset分離配信、Renderer–Main／OBS OverlayのLayer差分転送、Windows向け未署名RCパッケージ生成まで実装しています。
+M3「保存・復旧・性能・配信操作性」に加え、画像Asset分離配信、Renderer–Main／OBS OverlayのLayer差分転送、Windows向け未署名RCパッケージ生成と100回soak診断まで実装しています。
 
 実装済み:
 
@@ -84,6 +84,7 @@ M3「保存・復旧・性能・配信操作性」に加え、画像Asset分離�
 - lint、型検査、Unit Test、production build、E2E
 - Windows x64向けNSISインストーラーとportable版の生成
 - パッケージ済みexeによる永続化・loopback Bridge・Overlay HTTP smoke test
+- 同一Electron Mainプロセスでの100回ライフサイクル反復とRSS診断
 - Windows成果物のSHA-256一覧とソースhead SHA付きmanifest
 
 Raster／画像タイル単位の差分転送、実機8時間連続試験は後続工程で実施します。
@@ -126,11 +127,11 @@ pnpm package:win
 
 - `Live-Board-Setup-<version>-x64.exe`: NSISインストーラー
 - `Live-Board-Portable-<version>-x64.exe`: ポータブル版
-- GitHub ActionsではSHA-256一覧と`package-manifest.json`を同梱したartifactを14日保持
+- GitHub ActionsではSHA-256一覧、`package-manifest.json`、smoke／soak診断JSONを同梱したartifactを14日保持
 - コード署名は未対応のため、SmartScreenやウイルス対策ソフトの警告が表示される可能性があります
 - GitHub Releaseへの自動公開と自動更新は行いません
 
-パッケージ済みexeは内部smoke testで、Renderer／Overlayの配置、永続化初期化、loopback OBS Bridge、token付きOverlay HTTP 200を確認します。詳細は[Windows配布パッケージ設計](docs/windows-packaging.md)を参照してください。
+パッケージ済みexeは内部smoke testと100回soak testで、Renderer／Overlayの配置、永続化初期化、loopback OBS Bridge、token付きOverlay HTTP 200、Bridge終了、RSS増加傾向を確認します。詳細は[Windows配布パッケージ設計](docs/windows-packaging.md)を参照してください。
 
 ### 描画操作
 
@@ -308,7 +309,7 @@ pnpm dev:overlay
 - 4K画像の126.56MiBはRGBA理論値で、実画像デコード・GPUコピー・Canvasキャッシュを含む実測値ではありません。
 - 28,800回試験は8時間相当の高速状態遷移シミュレーションで、ElectronとOBSを実時間8時間稼働した試験ではありません。
 - Windowsパッケージはコード未署名で、SmartScreen reputationを持ちません。正式配布には署名・リリース手順・ロールバック方針が必要です。
-- Windows Package CIのpackaged smoke testは永続化とloopback Overlay経路を確認しますが、実OBS、GPU、スリープ復帰、長時間操作の代替ではありません。
+- Windows Package CIのpackaged smoke／100回soak testは永続化とloopback Overlay経路、MainプロセスRSSを確認しますが、実OBS、Canvas／GPU、スリープ復帰、実時間8時間操作の代替ではありません。
 - CI artifactはソースhead SHAへ紐付けて14日保持し、GitHub Releaseへ自動公開しません。
 
 ## 品質確認
@@ -325,7 +326,7 @@ pnpm package:win  # Windowsのみ
 
 `pnpm test:e2e`はDesktop RendererとOverlayのproduction buildをVite Previewで起動し、Page操作、Layer操作、Pointer描画、画像取り込み、SVG拒否、Asset重複排除、選択変形、描画Undo / Redo、Viewport操作、配信ショートカット、配信固定、危険CSS拒否、100ページ一覧、性能計測、Preview状態を確認します。
 OBS Bridgeのtoken認証、Asset一回登録、sourceなしdescriptor公開、`layer.patch`、再接続収束、静的ファイル配信はVitestで確認します。
-Windows Package CIはパッケージ済みElectron Main、永続化初期化、loopback Bridge、Overlay HTTP取得を自動確認します。実OBS Browser Source、GPU、スリープ復帰、8時間連続試験は後続で実施します。
+Windows Package CIはパッケージ済みElectron Main、永続化初期化、loopback Bridge、Overlay HTTP取得を単発と100回反復で自動確認し、所要時間とRSS診断JSONを保存します。実OBS Browser Source、Canvas／GPU、スリープ復帰、8時間連続試験は後続で実施します。
 
 ## モノレポ構成
 
