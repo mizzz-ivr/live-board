@@ -85,9 +85,10 @@ jobs:
         shell: pwsh
         run: |
           $exe = Resolve-Path 'apps/desktop/release/win-unpacked/LiveBoard.exe'
-          $output = Join-Path $env:RUNNER_TEMP 'live-board-packaged-smoke.json'
+          $output = Join-Path (Resolve-Path 'apps/desktop/release') 'packaged-smoke.json'
           $process = Start-Process -FilePath $exe -ArgumentList @(
             '--smoke-test',
+            '--smoke-iterations=1',
             "--smoke-output=$output"
           ) -PassThru
           if (-not $process.WaitForExit(60000)) {
@@ -101,8 +102,60 @@ jobs:
             throw 'Packaged smoke test did not create its result file.'
           }
           $result = Get-Content $output -Raw | ConvertFrom-Json
-          if ($result.ok -ne $true -or $result.overlayStatus -ne 200) {
+          if (
+            $result.ok -ne $true -or
+            $result.overlayStatus -ne 200 -or
+            $result.iterations -ne 1 -or
+            $result.successfulIterations -ne 1
+          ) {
             throw 'Packaged smoke test result is invalid.'
+          }
+          Get-Content $output
+
+      - name: Run packaged 100-iteration soak test
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path 'apps/desktop/release/win-unpacked/LiveBoard.exe'
+          $output = Join-Path (Resolve-Path 'apps/desktop/release') 'packaged-soak.json'
+          $process = Start-Process -FilePath $exe -ArgumentList @(
+            '--smoke-test',
+            '--smoke-iterations=100',
+            "--smoke-output=$output"
+          ) -PassThru
+          if (-not $process.WaitForExit(600000)) {
+            $process.Kill()
+            throw 'Packaged soak test timed out after 10 minutes.'
+          }
+          if ($process.ExitCode -ne 0) {
+            throw "Packaged soak test failed with exit code $($process.ExitCode)."
+          }
+          if (-not (Test-Path $output)) {
+            throw 'Packaged soak test did not create its result file.'
+          }
+
+          $result = Get-Content $output -Raw | ConvertFrom-Json
+          $maxFinalRssGrowth = 128MB
+          $maxPeakRssGrowth = 256MB
+          $maxIterationDurationMs = 15000
+          if (
+            $result.ok -ne $true -or
+            $result.overlayStatus -ne 200 -or
+            $result.iterations -ne 100 -or
+            $result.successfulIterations -ne 100
+          ) {
+            throw 'Packaged soak test did not complete all iterations.'
+          }
+          if ($result.rssDeltaBytes -gt $maxFinalRssGrowth) {
+            throw "Final RSS growth exceeded 128 MiB: $($result.rssDeltaBytes) bytes."
+          }
+          if (
+            ($result.maxRssBytes - $result.initialRssBytes) -gt
+            $maxPeakRssGrowth
+          ) {
+            throw 'Peak RSS growth exceeded 256 MiB.'
+          }
+          if ($result.durationMaxMs -gt $maxIterationDurationMs) {
+            throw "One iteration exceeded 15 seconds: $($result.durationMaxMs) ms."
           }
           Get-Content $output
 
@@ -136,6 +189,8 @@ jobs:
             signed = $false
             artifacts = @($artifactFiles | ForEach-Object { $_.Name })
             checksumFile = 'SHA256SUMS.txt'
+            diagnostics = @('packaged-smoke.json', 'packaged-soak.json')
+            soakIterations = 100
             workflowRunId = '${{ github.run_id }}'
             generatedAt = [DateTime]::UtcNow.ToString('o')
           }
@@ -157,3 +212,5 @@ jobs:
             apps/desktop/release/Live-Board-Portable-*-x64.exe
             apps/desktop/release/SHA256SUMS.txt
             apps/desktop/release/package-manifest.json
+            apps/desktop/release/packaged-smoke.json
+            apps/desktop/release/packaged-soak.json
