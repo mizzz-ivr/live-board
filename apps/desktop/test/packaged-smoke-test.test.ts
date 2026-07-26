@@ -23,7 +23,7 @@ describe('packaged smoke test', () => {
     const currentDirectory = join(root, 'app.asar', 'dist-electron');
     const resourcesPath = join(root, 'resources');
     const runtime = createRuntime(
-      [0, 10, 10, 30],
+      [0, 10.1234, 10.1234, 30.6912],
       [100, 120, 110],
     );
 
@@ -42,8 +42,8 @@ describe('packaged smoke test', () => {
       overlayStatus: 200,
       iterations: 2,
       successfulIterations: 2,
-      p95DurationMs: 20,
-      maxDurationMs: 20,
+      p95DurationMs: 20.568,
+      maxDurationMs: 20.568,
       initialRssBytes: 100,
       finalRssBytes: 110,
       maxRssBytes: 120,
