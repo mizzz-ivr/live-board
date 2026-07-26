@@ -1,0 +1,75 @@
+name: Apply README soak documentation
+
+on:
+  push:
+    branches:
+      - feat/windows-soak-test
+    paths:
+      - '.github/workflows/apply-readme-soak.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/windows-soak-test
+          fetch-depth: 0
+
+      - name: Update README
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('README.md')
+          text = path.read_text(encoding='utf-8')
+          replacements = [
+              (
+                  'M3「保存・復旧・性能・配信操作性」に加え、画像Asset分離配信、Renderer–Main／OBS OverlayのLayer差分転送、Windows向け未署名RCパッケージ生成まで実装しています。',
+                  'M3「保存・復旧・性能・配信操作性」に加え、画像Asset分離配信、Renderer–Main／OBS OverlayのLayer差分転送、Windows向け未署名RCパッケージ生成と100回soak診断まで実装しています。',
+              ),
+              (
+                  '- パッケージ済みexeによる永続化・loopback Bridge・Overlay HTTP smoke test\n',
+                  '- パッケージ済みexeによる永続化・loopback Bridge・Overlay HTTP smoke test\n- 同一Electron Mainプロセスでの100回ライフサイクル反復とRSS診断\n',
+              ),
+              (
+                  '- GitHub ActionsではSHA-256一覧と`package-manifest.json`を同梱したartifactを14日保持',
+                  '- GitHub ActionsではSHA-256一覧、`package-manifest.json`、smoke／soak診断JSONを同梱したartifactを14日保持',
+              ),
+              (
+                  'パッケージ済みexeは内部smoke testで、Renderer／Overlayの配置、永続化初期化、loopback OBS Bridge、token付きOverlay HTTP 200を確認します。詳細は[Windows配布パッケージ設計](docs/windows-packaging.md)を参照してください。',
+                  'パッケージ済みexeは内部smoke testと100回soak testで、Renderer／Overlayの配置、永続化初期化、loopback OBS Bridge、token付きOverlay HTTP 200、Bridge終了、RSS増加傾向を確認します。詳細は[Windows配布パッケージ設計](docs/windows-packaging.md)を参照してください。',
+              ),
+              (
+                  '- Windows Package CIのpackaged smoke testは永続化とloopback Overlay経路を確認しますが、実OBS、GPU、スリープ復帰、長時間操作の代替ではありません。',
+                  '- Windows Package CIのpackaged smoke／100回soak testは永続化とloopback Overlay経路、MainプロセスRSSを確認しますが、実OBS、Canvas／GPU、スリープ復帰、実時間8時間操作の代替ではありません。',
+              ),
+              (
+                  'Windows Package CIはパッケージ済みElectron Main、永続化初期化、loopback Bridge、Overlay HTTP取得を自動確認します。実OBS Browser Source、GPU、スリープ復帰、8時間連続試験は後続で実施します。',
+                  'Windows Package CIはパッケージ済みElectron Main、永続化初期化、loopback Bridge、Overlay HTTP取得を単発と100回反復で自動確認し、所要時間とRSS診断JSONを保存します。実OBS Browser Source、Canvas／GPU、スリープ復帰、8時間連続試験は後続で実施します。',
+              ),
+          ]
+
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'Expected one README match, found {count}: {old[:80]}')
+              text = text.replace(old, new)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Commit documentation
+        shell: bash
+        run: |
+          rm .github/workflows/apply-readme-soak.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md .github/workflows/apply-readme-soak.yml
+          git commit -m 'READMEにWindows soak testの運用を追記'
+          git push origin HEAD:feat/windows-soak-test
