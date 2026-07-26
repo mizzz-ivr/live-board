@@ -159,8 +159,11 @@ async function runPackagedSmokeIteration(
       overlayStatus: response.status,
     };
   } finally {
-    if (bridge !== undefined) await bridge.close();
-    await rm(smokeRoot, { recursive: true, force: true });
+    try {
+      if (bridge !== undefined) await bridge.close();
+    } finally {
+      await rm(smokeRoot, { recursive: true, force: true });
+    }
   }
 }
 
