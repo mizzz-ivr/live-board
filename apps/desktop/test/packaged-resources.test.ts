@@ -14,7 +14,7 @@ describe('packaged resources', () => {
     });
   });
 
-  it('smoke testと出力先を解析する', () => {
+  it('smoke testは既定1回として出力先を解析する', () => {
     expect(parsePackagedSmokeArguments([
       'LiveBoard.exe',
       '--smoke-test',
@@ -22,20 +22,62 @@ describe('packaged resources', () => {
     ])).toEqual({
       enabled: true,
       outputPath: 'C:/temp/result.json',
+      iterations: 1,
     });
   });
 
-  it('smoke testなしの出力指定と重複指定を拒否する', () => {
+  it('smoke testの反復回数を1〜500回で受理する', () => {
+    expect(parsePackagedSmokeArguments([
+      'LiveBoard.exe',
+      '--smoke-test',
+      '--smoke-iterations=100',
+    ])).toEqual({
+      enabled: true,
+      outputPath: undefined,
+      iterations: 100,
+    });
+    expect(parsePackagedSmokeArguments([
+      'LiveBoard.exe',
+      '--smoke-test',
+      '--smoke-iterations=500',
+    ]).iterations).toBe(500);
+  });
+
+  it.each(['0', '-1', '1.5', 'text', '501', '', '001'])(
+    '不正な反復回数 %s を拒否する',
+    (value) => {
+      expect(() => parsePackagedSmokeArguments([
+        'LiveBoard.exe',
+        '--smoke-test',
+        `--smoke-iterations=${value}`,
+      ])).toThrow('PACKAGED_SMOKE_ITERATIONS_INVALID');
+    },
+  );
+
+  it('smoke testなしの出力指定と反復回数指定を拒否する', () => {
     expect(() => parsePackagedSmokeArguments([
       'LiveBoard.exe',
       '--smoke-output=C:/temp/result.json',
     ])).toThrow('PACKAGED_SMOKE_OUTPUT_WITHOUT_TEST');
     expect(() => parsePackagedSmokeArguments([
       'LiveBoard.exe',
+      '--smoke-iterations=2',
+    ])).toThrow('PACKAGED_SMOKE_ITERATIONS_WITHOUT_TEST');
+  });
+
+  it('出力先と反復回数の重複指定を拒否する', () => {
+    expect(() => parsePackagedSmokeArguments([
+      'LiveBoard.exe',
       '--smoke-test',
       '--smoke-output=a.json',
       '--smoke-output=b.json',
     ])).toThrow('PACKAGED_SMOKE_OUTPUT_DUPLICATED');
+    expect(() => parsePackagedSmokeArguments([
+      'LiveBoard.exe',
+      '--smoke-test',
+      '--smoke-iterations=2',
+      '--smoke-iterations=3',
+    ])).toThrow('PACKAGED_SMOKE_ITERATIONS_DUPLICATED');
   });
 
   it('空のリソースパスを拒否する', () => {
