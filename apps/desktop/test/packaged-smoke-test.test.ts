@@ -15,7 +15,7 @@ afterEach(async () => {
 });
 
 describe('packaged smoke test', () => {
-  it('Renderer・永続化・loopback Overlay経路を確認する', async () => {
+  it('Renderer・永続化・loopback Overlay経路を既定1回確認する', async () => {
     const root = await createPackagedFixture();
     const currentDirectory = join(root, 'app.asar', 'dist-electron');
     const resourcesPath = join(root, 'resources');
@@ -31,15 +31,69 @@ describe('packaged smoke test', () => {
       version: '0.1.0-test',
       host: '127.0.0.1',
       overlayStatus: 200,
+      iterations: 1,
+      successfulIterations: 1,
     });
     expect(result.port).toBeGreaterThan(0);
+    expect(result.durationP95Ms).toBeGreaterThanOrEqual(0);
+    expect(result.durationMaxMs).toBeGreaterThanOrEqual(result.durationP95Ms);
+    expect(result.initialRssBytes).toBeGreaterThan(0);
+    expect(result.finalRssBytes).toBeGreaterThan(0);
+    expect(result.maxRssBytes).toBeGreaterThanOrEqual(result.initialRssBytes);
+    expect(result.maxRssBytes).toBeGreaterThanOrEqual(result.finalRssBytes);
+  });
+
+  it('同一プロセスで2回反復し、集計値だけを返す', async () => {
+    const root = await createPackagedFixture();
+    const result = await runPackagedSmokeTest({
+      currentDirectory: join(root, 'app.asar', 'dist-electron'),
+      resourcesPath: join(root, 'resources'),
+      version: '0.1.0-test',
+      iterations: 2,
+    });
+
+    expect(result.iterations).toBe(2);
+    expect(result.successfulIterations).toBe(2);
+    expect(result.overlayStatus).toBe(200);
+    expect(result.durationMaxMs).toBeGreaterThanOrEqual(result.durationP95Ms);
+    expect(result.rssDeltaBytes).toBe(result.finalRssBytes - result.initialRssBytes);
     expect(Object.keys(result).sort()).toEqual([
+      'durationMaxMs',
+      'durationP95Ms',
+      'finalRssBytes',
       'host',
+      'initialRssBytes',
+      'iterations',
+      'maxRssBytes',
       'ok',
       'overlayStatus',
       'port',
+      'rssDeltaBytes',
+      'successfulIterations',
       'version',
     ]);
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain(root);
+    expect(serialized).not.toContain('token');
+    expect(serialized).not.toContain('overlayUrl');
+  });
+
+  it('反復回数の境界外を実行前に拒否する', async () => {
+    const root = await createPackagedFixture();
+    const baseOptions = {
+      currentDirectory: join(root, 'app.asar', 'dist-electron'),
+      resourcesPath: join(root, 'resources'),
+      version: '0.1.0-test',
+    };
+
+    await expect(runPackagedSmokeTest({
+      ...baseOptions,
+      iterations: 0,
+    })).rejects.toThrow('PACKAGED_SMOKE_ITERATIONS_INVALID');
+    await expect(runPackagedSmokeTest({
+      ...baseOptions,
+      iterations: 501,
+    })).rejects.toThrow('PACKAGED_SMOKE_ITERATIONS_INVALID');
   });
 
   it('RendererまたはOverlayが欠落している場合はBridge起動前に拒否する', async () => {
@@ -49,6 +103,7 @@ describe('packaged smoke test', () => {
       currentDirectory: join(root, 'app.asar', 'dist-electron'),
       resourcesPath: join(root, 'resources'),
       version: '0.1.0-test',
+      iterations: 2,
     })).rejects.toThrow('PACKAGED_SMOKE_RESOURCE_MISSING');
   });
 });
