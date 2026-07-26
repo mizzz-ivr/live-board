@@ -21,7 +21,7 @@
 
 ## 3. CI実測結果
 
-GitHub ActionsのUbuntu runner、Node.js 22、Vitest 4.1.10で取得した値です。ブラウザ描画・Windows Electron・OBS Browser Sourceの実測値ではありません。
+状態遷移・DTOの値はGitHub ActionsのUbuntu runner、Node.js 22、Vitest 4.1.10で取得しています。Windows packaged soakはWindows Server 2025 runner上でパッケージ済みElectron Mainを実行した値です。いずれも実OBS Browser Source、GPU、利用者端末の実測値ではありません。
 
 | 試験 | 実測 | 判定 |
 |---|---:|---|
@@ -36,8 +36,12 @@ GitHub ActionsのUbuntu runner、Node.js 22、Vitest 4.1.10で取得した値で
 | Renderer→Main 100LayerフルSnapshot | 48,006byte | 比較元 |
 | Renderer→Main 1Layer更新patch | 1,764byte | フルの3.67% |
 | Renderer→Main payload削減率 | 96.33% | 10%未満の退行防止基準内 |
+| Windows packaged soak | 100 / 100回成功 | Overlay HTTP 200 |
+| packaged soak p95 / 最大 | 63.163ms / 200.460ms | 最大10秒以内 |
+| packaged soak 初回 / 最終RSS | 65.61MiB / 83.23MiB | 増加17.62MiB |
+| packaged soak 最大RSS | 83.23MiB | 768MiB以内 |
 
-Domainは13ファイル・57テスト、OBS Bridgeは2ファイル・14テストが成功しました。計測値はrunner負荷で変動するため、個々の値そのものではなく性能予算を継続的に超えないことを品質ゲートにします。
+Windows packaged soakの値はsource head `148c6dcdbb53cc5608f34b55df699f1a6f5f757a`、Windows Package run `30185604929`で取得しました。runner負荷やGCタイミングで変動するため、絶対値だけでメモリリークを断定せず、品質ゲートと複数runの傾向を確認します。
 
 ## 4. CIで実施する試験
 
@@ -91,6 +95,31 @@ width × height × 4 byte × image count
 
 この試験はIPCオブジェクトのJSON表現を比較する退行防止fixtureです。Electron structured cloneの実時間、メモリコピー回数、GC、Windows実機CPUは直接測定していません。
 
+### 4.6 Windows packaged soak
+
+Windows Package CIで、パッケージ済み`LiveBoard.exe`をsmoke modeで100回反復します。
+
+各反復:
+
+- 一時永続化領域を作成する
+- 永続化サービスを初期化する
+- loopback OBS Bridgeを起動する
+- token付きOverlay URLをHTTP取得する
+- HTMLのReact rootを確認する
+- Bridgeを終了する
+- 一時領域を削除する
+
+品質ゲート:
+
+- 100 / 100回成功
+- 全反復でOverlay HTTP 200
+- 最終RSS増加128MiB以下
+- 最大RSS768MiB以下
+- 1反復最大10秒以下
+- 結果JSONにtoken・環境固有パスを含めない
+
+詳細は[Windowsパッケージ反復soak test設計](windows-package-soak.md)を参照してください。
+
 ## 5. 現在の最適化
 
 - 非表示Layerと非表示フォルダー配下をBroadcastSnapshotへ含めない
@@ -102,6 +131,7 @@ width × height × 4 byte × image count
 - OBS優先プリセットではページ遷移と装飾効果を無効化
 - Renderer→Mainの画像bytesをSHA-256単位で一回登録
 - Renderer→MainとOBS Bridge→OverlayでLayer DTOの差分／フル自動選択
+- パッケージ済みMainで永続化・Bridge・Overlayライフサイクルを100回反復
 
 ## 6. Worker / OffscreenCanvas / WebGL判断
 
@@ -132,5 +162,6 @@ width × height × 4 byte × image count
 - ウイルス対策ソフト動作中の自動保存
 - スリープ復帰、OBS再接続、ディスプレイ構成変更
 - Renderer→Main Layer patchのstructured clone時間とGCピーク
+- 実OBSを含むEditor／Overlay renderer processのRSS・GPUメモリ推移
 
-実機結果は配布候補ビルドごとに記録します。
+packaged soakはElectron Mainの反復ライフサイクルを確認しますが、上記の実機試験を代替しません。実機結果は配布候補ビルドごとに記録します。
