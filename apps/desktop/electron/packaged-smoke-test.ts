@@ -97,8 +97,8 @@ export async function runPackagedSmokeTest(
     overlayStatus: lastOverlayStatus,
     iterations,
     successfulIterations,
-    p95DurationMs: percentile95(durations),
-    maxDurationMs: Math.max(...durations),
+    p95DurationMs: roundMilliseconds(percentile95(durations)),
+    maxDurationMs: roundMilliseconds(Math.max(...durations)),
     initialRssBytes,
     finalRssBytes,
     maxRssBytes,
@@ -182,4 +182,8 @@ function percentile95(values: readonly number[]): number {
   const sorted = [...values].sort((left, right) => left - right);
   const index = Math.max(0, Math.ceil(sorted.length * 0.95) - 1);
   return sorted[index] ?? 0;
+}
+
+function roundMilliseconds(value: number): number {
+  return Math.round(value * 1_000) / 1_000;
 }
