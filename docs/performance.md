@@ -16,12 +16,15 @@
 | Overlay描画 | 100ms |
 | OBSページ切り替え反映 | 100ms |
 | 自動保存による描画停止 | 50ms |
+| Windows packaged soakの最終RSS増加 | 128MiB |
+| Windows packaged soakのピークRSS増加 | 256MiB |
+| Windows packaged soakの1反復最大時間 | 15秒 |
 
 予算超過時は計測値と対象を警告へ記録し、再現条件を固定してから最適化します。
 
 ## 3. CI実測結果
 
-GitHub ActionsのUbuntu runner、Node.js 22、Vitest 4.1.10で取得した値です。ブラウザ描画・Windows Electron・OBS Browser Sourceの実測値ではありません。
+Ubuntuの状態遷移・DTO試験と、Windowsのパッケージ済みElectron Main試験を分けて記録します。いずれも実OBS Browser Source、GPU、実時間8時間操作の測定ではありません。
 
 | 試験 | 実測 | 判定 |
 |---|---:|---|
@@ -36,8 +39,14 @@ GitHub ActionsのUbuntu runner、Node.js 22、Vitest 4.1.10で取得した値で
 | Renderer→Main 100LayerフルSnapshot | 48,006byte | 比較元 |
 | Renderer→Main 1Layer更新patch | 1,764byte | フルの3.67% |
 | Renderer→Main payload削減率 | 96.33% | 10%未満の退行防止基準内 |
+| Windows packaged soak | 100 / 100回成功 | 成功 |
+| Windows packaged soak p95 | 25.211ms | 予算内 |
+| Windows packaged soak 最大 | 69.592ms | 予算内 |
+| Windows packaged soak 初回RSS | 68.27MiB | 比較元 |
+| Windows packaged soak 最終RSS | 86.20MiB | 増加17.93MiB |
+| Windows packaged soak 最大RSS | 86.20MiB | ピーク増加17.93MiB |
 
-Domainは13ファイル・57テスト、OBS Bridgeは2ファイル・14テストが成功しました。計測値はrunner負荷で変動するため、個々の値そのものではなく性能予算を継続的に超えないことを品質ゲートにします。
+Windows値はGitHub ActionsのWindows Server 2025 runner、Electron 43.1.1、100反復で取得しました。診断runは`30185070266`、対象headは`1278096d7b3e8a032d1474ed6dc047d9320c8daf`です。runner負荷やメモリアロケータで値は変動するため、単発値の一致ではなく予算内で継続成功することを品質ゲートにします。
 
 ## 4. CIで実施する試験
 
@@ -91,6 +100,30 @@ width × height × 4 byte × image count
 
 この試験はIPCオブジェクトのJSON表現を比較する退行防止fixtureです。Electron structured cloneの実時間、メモリコピー回数、GC、Windows実機CPUは直接測定していません。
 
+### 4.6 Windows packaged soak
+
+パッケージ済み`LiveBoard.exe`をsmoke modeで起動し、同一Electron Mainプロセス内で100回反復します。
+
+各反復:
+
+- 一時永続化領域を作成して初期化
+- loopback OBS Bridgeを起動
+- token付きOverlay URLをHTTP取得
+- HTTP 200とReact rootを確認
+- Bridgeを終了
+- 一時領域を削除
+- 所要時間とプロセスRSSを記録
+
+品質ゲート:
+
+- 全100回成功
+- 最終RSS増加128MiB以内
+- ピークRSS増加256MiB以内
+- 1反復最大15秒以内
+- 全体10分以内
+
+結果は`packaged-soak.json`としてWindows Package artifactへ保存します。各反復のURL、token、ポート履歴、パスは保存しません。
+
 ## 5. 現在の最適化
 
 - 非表示Layerと非表示フォルダー配下をBroadcastSnapshotへ含めない
@@ -102,6 +135,7 @@ width × height × 4 byte × image count
 - OBS優先プリセットではページ遷移と装飾効果を無効化
 - Renderer→Mainの画像bytesをSHA-256単位で一回登録
 - Renderer→MainとOBS Bridge→OverlayでLayer DTOの差分／フル自動選択
+- WindowsパッケージのBridge・永続化ライフサイクルを100回反復して診断
 
 ## 6. Worker / OffscreenCanvas / WebGL判断
 
@@ -132,5 +166,7 @@ width × height × 4 byte × image count
 - ウイルス対策ソフト動作中の自動保存
 - スリープ復帰、OBS再接続、ディスプレイ構成変更
 - Renderer→Main Layer patchのstructured clone時間とGCピーク
+
+Windows packaged soakはElectron Main、永続化、loopback Bridge、Overlay静的配信の反復試験です。OBS Browser Source、Canvas描画、GPU、ユーザー操作を含む実機試験の代替ではありません。
 
 実機結果は配布候補ビルドごとに記録します。
