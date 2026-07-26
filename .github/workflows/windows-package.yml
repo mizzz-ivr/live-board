@@ -38,6 +38,10 @@ jobs:
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      SOAK_ITERATIONS: '100'
+      MAX_SOAK_RSS_DELTA_BYTES: '134217728'
+      MAX_SOAK_RSS_BYTES: '805306368'
+      MAX_SOAK_DURATION_MS: '10000'
 
     steps:
       - name: Checkout
@@ -101,9 +105,81 @@ jobs:
             throw 'Packaged smoke test did not create its result file.'
           }
           $result = Get-Content $output -Raw | ConvertFrom-Json
-          if ($result.ok -ne $true -or $result.overlayStatus -ne 200) {
+          if (
+            $result.ok -ne $true -or
+            $result.overlayStatus -ne 200 -or
+            $result.iterations -ne 1 -or
+            $result.successfulIterations -ne 1
+          ) {
             throw 'Packaged smoke test result is invalid.'
           }
+          Get-Content $output
+
+      - name: Run packaged 100-iteration soak test
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path 'apps/desktop/release/win-unpacked/LiveBoard.exe'
+          $release = Resolve-Path 'apps/desktop/release'
+          $output = Join-Path $release 'packaged-soak-result.json'
+          $process = Start-Process -FilePath $exe -ArgumentList @(
+            '--smoke-test',
+            "--smoke-iterations=$env:SOAK_ITERATIONS",
+            "--smoke-output=$output"
+          ) -PassThru
+          if (-not $process.WaitForExit(600000)) {
+            $process.Kill()
+            throw 'Packaged soak test timed out after 10 minutes.'
+          }
+          if ($process.ExitCode -ne 0) {
+            throw "Packaged soak test failed with exit code $($process.ExitCode)."
+          }
+          if (-not (Test-Path $output)) {
+            throw 'Packaged soak test did not create its result file.'
+          }
+
+          $raw = Get-Content $output -Raw
+          $result = $raw | ConvertFrom-Json
+          if (
+            $result.ok -ne $true -or
+            $result.overlayStatus -ne 200 -or
+            $result.iterations -ne [int]$env:SOAK_ITERATIONS -or
+            $result.successfulIterations -ne [int]$env:SOAK_ITERATIONS
+          ) {
+            throw 'Packaged soak result does not contain 100 successful iterations.'
+          }
+          if ($result.rssDeltaBytes -gt [int64]$env:MAX_SOAK_RSS_DELTA_BYTES) {
+            throw "Packaged soak RSS delta exceeded: $($result.rssDeltaBytes) bytes."
+          }
+          if ($result.maxRssBytes -gt [int64]$env:MAX_SOAK_RSS_BYTES) {
+            throw "Packaged soak max RSS exceeded: $($result.maxRssBytes) bytes."
+          }
+          if ($result.maxDurationMs -gt [double]$env:MAX_SOAK_DURATION_MS) {
+            throw "Packaged soak iteration duration exceeded: $($result.maxDurationMs) ms."
+          }
+
+          $expectedFields = @(
+            'ok',
+            'version',
+            'host',
+            'port',
+            'overlayStatus',
+            'iterations',
+            'successfulIterations',
+            'p95DurationMs',
+            'maxDurationMs',
+            'initialRssBytes',
+            'finalRssBytes',
+            'maxRssBytes',
+            'rssDeltaBytes'
+          ) | Sort-Object
+          $actualFields = @($result.PSObject.Properties.Name) | Sort-Object
+          if (Compare-Object $expectedFields $actualFields) {
+            throw 'Packaged soak result contains unexpected public fields.'
+          }
+          if ($raw -match '(?i)"token"|[A-Za-z]:\\\\|/home/runner|\\\\actions\\\\') {
+            throw 'Packaged soak result contains an environment-specific path or token.'
+          }
+
           Get-Content $output
 
       - name: Create checksums and package manifest
@@ -157,3 +233,11 @@ jobs:
             apps/desktop/release/Live-Board-Portable-*-x64.exe
             apps/desktop/release/SHA256SUMS.txt
             apps/desktop/release/package-manifest.json
+
+      - name: Upload packaged soak diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-board-windows-soak-${{ env.SOURCE_SHA }}
+          if-no-files-found: error
+          retention-days: 14
+          path: apps/desktop/release/packaged-soak-result.json
