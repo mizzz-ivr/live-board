@@ -15,7 +15,7 @@ Live Board は、配信者向けのローカル完結型リアルタイムペイ
 
 ## 現在の状態
 
-M3「保存・復旧・性能・配信操作性」に加え、画像Asset分離配信、Renderer–Main／OBS OverlayのLayer差分転送、Windows向け未署名RCパッケージ生成まで実装しています。
+M3「保存・復旧・性能・配信操作性」に加え、画像Asset分離配信、Renderer–Main／OBS OverlayのLayer差分転送、Windows向け未署名RCパッケージ生成と100回反復soakまで実装しています。
 
 実装済み:
 
@@ -84,6 +84,8 @@ M3「保存・復旧・性能・配信操作性」に加え、画像Asset分離�
 - lint、型検査、Unit Test、production build、E2E
 - Windows x64向けNSISインストーラーとportable版の生成
 - パッケージ済みexeによる永続化・loopback Bridge・Overlay HTTP smoke test
+- パッケージ済みMainの100回反復soakとRSS／反復時間診断
+- soak診断JSONのsource head SHA付きartifact保存
 - Windows成果物のSHA-256一覧とソースhead SHA付きmanifest
 
 Raster／画像タイル単位の差分転送、実機8時間連続試験は後続工程で実施します。
@@ -127,10 +129,11 @@ pnpm package:win
 - `Live-Board-Setup-<version>-x64.exe`: NSISインストーラー
 - `Live-Board-Portable-<version>-x64.exe`: ポータブル版
 - GitHub ActionsではSHA-256一覧と`package-manifest.json`を同梱したartifactを14日保持
+- 同じWindows Package CIで100回soakを実行し、診断JSONを別artifactとして14日保持
 - コード署名は未対応のため、SmartScreenやウイルス対策ソフトの警告が表示される可能性があります
 - GitHub Releaseへの自動公開と自動更新は行いません
 
-パッケージ済みexeは内部smoke testで、Renderer／Overlayの配置、永続化初期化、loopback OBS Bridge、token付きOverlay HTTP 200を確認します。詳細は[Windows配布パッケージ設計](docs/windows-packaging.md)を参照してください。
+パッケージ済みexeは内部smoke testで、Renderer／Overlayの配置、永続化初期化、loopback OBS Bridge、token付きOverlay HTTP 200を確認します。`--smoke-iterations=100`では同じライフサイクルを反復し、所要時間とRSSを集計します。詳細は[Windows配布パッケージ設計](docs/windows-packaging.md)と[Windowsパッケージ反復soak test設計](docs/windows-package-soak.md)を参照してください。
 
 ### 描画操作
 
@@ -282,7 +285,8 @@ pnpm dev:overlay
 - 100ページ切り替え判定0.716ms、100Layer投影1.599msをGitHub Actions上で計測しました。
 - 4K画像4枚の理論RGBAメモリは約126.56MiBです。
 - 28,800回の8時間相当切り替えはrevision欠番0件、保持Workspace 1件でした。
-- これらはUbuntu / Node.js / Vitest上の状態遷移計測で、Windows Electron・OBS・GPUの実機値ではありません。
+- Windows packaged soakは100 / 100回成功、p95 63.163ms、最大200.460ms、RSS増加17.62MiBでした。
+- 状態遷移値はUbuntu / Node.js / Vitest、packaged soakはWindows Server 2025 runner上の値で、実OBS・GPU・利用者端末の実測値ではありません。
 - 現時点ではCanvas 2Dを維持し、Worker / WebGLは性能予算の継続超過時だけ導入します。
 - 詳細は[配信性能・長時間安定性試験](docs/performance.md)を参照してください。
 
@@ -308,7 +312,7 @@ pnpm dev:overlay
 - 4K画像の126.56MiBはRGBA理論値で、実画像デコード・GPUコピー・Canvasキャッシュを含む実測値ではありません。
 - 28,800回試験は8時間相当の高速状態遷移シミュレーションで、ElectronとOBSを実時間8時間稼働した試験ではありません。
 - Windowsパッケージはコード未署名で、SmartScreen reputationを持ちません。正式配布には署名・リリース手順・ロールバック方針が必要です。
-- Windows Package CIのpackaged smoke testは永続化とloopback Overlay経路を確認しますが、実OBS、GPU、スリープ復帰、長時間操作の代替ではありません。
+- Windows Package CIは1回smokeと100回soakで永続化・loopback Overlay経路・Main RSS推移を確認しますが、実OBS、GPU、スリープ復帰、8時間操作の代替ではありません。
 - CI artifactはソースhead SHAへ紐付けて14日保持し、GitHub Releaseへ自動公開しません。
 
 ## 品質確認
@@ -325,7 +329,7 @@ pnpm package:win  # Windowsのみ
 
 `pnpm test:e2e`はDesktop RendererとOverlayのproduction buildをVite Previewで起動し、Page操作、Layer操作、Pointer描画、画像取り込み、SVG拒否、Asset重複排除、選択変形、描画Undo / Redo、Viewport操作、配信ショートカット、配信固定、危険CSS拒否、100ページ一覧、性能計測、Preview状態を確認します。
 OBS Bridgeのtoken認証、Asset一回登録、sourceなしdescriptor公開、`layer.patch`、再接続収束、静的ファイル配信はVitestで確認します。
-Windows Package CIはパッケージ済みElectron Main、永続化初期化、loopback Bridge、Overlay HTTP取得を自動確認します。実OBS Browser Source、GPU、スリープ復帰、8時間連続試験は後続で実施します。
+Windows Package CIはパッケージ済みElectron Main、永続化初期化、loopback Bridge、Overlay HTTP取得を1回smokeと100回soakで確認し、RSSと反復時間を診断artifactへ保存します。実OBS Browser Source、GPU、スリープ復帰、8時間連続試験は後続で実施します。
 
 ## モノレポ構成
 
@@ -357,6 +361,7 @@ packages/
 - [OBS Layer差分転送](docs/obs-layer-patch.md)
 - [配信性能・長時間安定性試験](docs/performance.md)
 - [Windows配布パッケージ](docs/windows-packaging.md)
+- [Windowsパッケージ反復soak test](docs/windows-package-soak.md)
 - [ロードマップ](docs/roadmap.md)
 - [AIエージェント向け実装規約](AGENTS.md)
 
