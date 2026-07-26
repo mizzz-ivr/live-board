@@ -60,15 +60,28 @@ apps/desktop/release/
 
 生成物はGit管理対象外です。
 
-## 5. packaged smoke test
+## 5. packaged smoke / soak test
 
-パッケージ済みexeは次の内部確認モードを持ちます。
+パッケージ済みexeは内部確認モードを持ちます。
+
+### 5.1 既定の1回smoke
 
 ```powershell
 LiveBoard.exe --smoke-test --smoke-output=C:\temp\live-board-smoke.json
 ```
 
-確認内容:
+### 5.2 反復soak
+
+```powershell
+LiveBoard.exe `
+  --smoke-test `
+  --smoke-iterations=100 `
+  --smoke-output=C:\temp\live-board-soak.json
+```
+
+`--smoke-iterations`は1〜500の整数だけを受理し、省略時は1回です。
+
+各反復の確認内容:
 
 1. Rendererの`index.html`がASAR内に存在する
 2. Overlayの`index.html`が`resources/overlay/dist`に存在する
@@ -78,7 +91,7 @@ LiveBoard.exe --smoke-test --smoke-output=C:\temp\live-board-smoke.json
 6. HTMLにReact rootが存在する
 7. Bridgeを閉じ、一時データを削除できる
 
-成功時は終了コード0と次のJSONを出力します。
+成功時は終了コード0と、集計値だけを含むJSONを出力します。
 
 ```json
 {
@@ -86,11 +99,21 @@ LiveBoard.exe --smoke-test --smoke-output=C:\temp\live-board-smoke.json
   "version": "0.1.0",
   "host": "127.0.0.1",
   "port": 49152,
-  "overlayStatus": 200
+  "overlayStatus": 200,
+  "iterations": 100,
+  "successfulIterations": 100,
+  "p95DurationMs": 25.4,
+  "maxDurationMs": 48.9,
+  "initialRssBytes": 120000000,
+  "finalRssBytes": 124000000,
+  "maxRssBytes": 130000000,
+  "rssDeltaBytes": 4000000
 }
 ```
 
 接続token、Workspaceパス、インストール先、runner固有パスは結果へ含めません。
+
+反復条件、集計値、品質ゲートの詳細は[Windowsパッケージ反復soak test設計](windows-package-soak.md)を参照してください。
 
 ## 6. GitHub Actions
 
@@ -105,10 +128,19 @@ LiveBoard.exe --smoke-test --smoke-output=C:\temp\live-board-smoke.json
 1. frozen lockfileで依存関係を復元
 2. Renderer、Overlay、Main / Preload、共有packageをproduction build
 3. NSISとportableを生成
-4. `win-unpacked/LiveBoard.exe`でpackaged smoke test
-5. 成果物の件数・命名を検証
-6. SHA-256とmanifestを生成
-7. 未署名artifactとして保存
+4. `win-unpacked/LiveBoard.exe`で1回のpackaged smoke test
+5. 同じexeで100回のpackaged soak test
+6. RSS増加量、最大RSS、最大反復時間を品質ゲートと比較
+7. 成果物の件数・命名を検証
+8. SHA-256とmanifestを生成
+9. 未署名Windows artifactとsoak診断artifactを保存
+
+artifact:
+
+```text
+live-board-windows-unsigned-<source head SHA>
+live-board-windows-soak-<source head SHA>
+```
 
 GitHub Releaseへの自動公開は行いません。artifactを実機検証し、配布判断を行った後に別タスクで公開します。
 
@@ -130,7 +162,7 @@ GitHub Releaseへの自動公開は行いません。artifactを実機検証し�
 
 ### トークン
 
-OBS URLには起動ごとのtokenが含まれます。パッケージ、manifest、smoke result、CIログへtokenを出力しません。
+OBS URLには起動ごとのtokenが含まれます。パッケージ、manifest、smoke / soak result、CIログへtokenを出力しません。
 
 ### ユーザーデータ
 
@@ -139,13 +171,15 @@ NSISアンインストールではユーザーデータを自動削除しませ�
 ## 8. 実機受け入れ手順
 
 1. `SHA256SUMS.txt`でexeを検証する
-2. portable版で起動・保存・OBS接続を確認する
-3. NSIS版でインストール先変更、起動、アンインストールを確認する
-4. `.liveboard`保存・再読込を確認する
-5. OBS Browser Sourceへtoken付きURLを追加する
-6. Page切り替え、Layer更新、画像配置を確認する
-7. スリープ復帰とOBS再接続を確認する
-8. 4K画像複数配置と長時間試験を実施する
+2. `package-manifest.json`のsource head SHAと対象commitを照合する
+3. soak診断artifactで100回成功とRSS品質ゲート内を確認する
+4. portable版で起動・保存・OBS接続を確認する
+5. NSIS版でインストール先変更、起動、アンインストールを確認する
+6. `.liveboard`保存・再読込を確認する
+7. OBS Browser Sourceへtoken付きURLを追加する
+8. Page切り替え、Layer更新、画像配置を確認する
+9. スリープ復帰とOBS再接続を確認する
+10. 4K画像複数配置と長時間試験を実施する
 
 ## 9. 対象外
 
@@ -155,6 +189,7 @@ NSISアンインストールではユーザーデータを自動削除しませ�
 - 自動更新
 - `.liveboard`ファイル関連付け
 - macOS / Linuxパッケージ
+- OBS Browser Source実体を使う自動soak
 - 8時間実機試験の実施結果
 
 正式公開前に、署名・バージョニング・リリースノート・脆弱性対応・ロールバック手順を別タスクで決定します。
