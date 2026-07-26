@@ -71,16 +71,16 @@ LiveBoard.exe `
 - `p95DurationMs`: 95%の反復がこの時間以内に完了した値
 - `maxDurationMs`: 最も時間がかかった1反復
 
-計測範囲には永続化初期化、Bridge起動、Overlay取得、Bridge終了、一時領域削除を含みます。
+計測範囲には永続化初期化、Bridge起動、Overlay取得、Bridge終了、一時領域削除を含みます。JSONへは小数第3位まで記録します。
 
 ### RSS
 
 - `initialRssBytes`: 反復開始前のMainプロセスRSS
 - `finalRssBytes`: 最終反復のクリーンアップ後RSS
-- `maxRssBytes`: 計測中に観測した最大RSS
+- `maxRssBytes`: 反復開始前と各反復のクリーンアップ後に採取したRSSの最大値
 - `rssDeltaBytes`: 最終RSSから初回RSSを引いた値
 
-GCの実行タイミングは強制しません。単一runの絶対値だけでメモリリークと断定せず、同一fixtureの継続的な傾向と実機計測を合わせて判断します。
+反復途中の瞬間的なピークRSSは採取しません。GCの実行タイミングも強制しないため、単一runの絶対値だけでメモリリークと断定せず、同一fixtureの継続的な傾向と実機計測を合わせて判断します。
 
 ## 4. 公開しない情報
 
