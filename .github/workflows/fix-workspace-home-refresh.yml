@@ -1,0 +1,36 @@
+name: Fix workspace home refresh
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/fix-workspace-home-refresh.yml'
+      - 'scripts/fix-workspace-home-refresh.mjs'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/workspace-home
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply refresh isolation
+        run: node scripts/fix-workspace-home-refresh.mjs
+      - name: Remove temporary files
+        run: |
+          rm .github/workflows/fix-workspace-home-refresh.yml
+          rm scripts/fix-workspace-home-refresh.mjs
+      - name: Commit changes
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "読込成功後の一覧更新失敗を遷移失敗から分離"
+          git push origin HEAD:feat/workspace-home
