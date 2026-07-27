@@ -109,6 +109,14 @@ export function useWorkspacePersistence(input: {
     setRecoveryCandidates(recovery.candidates);
   }, [api]);
 
+  const refreshAfterSuccessfulLoad = useCallback(async (): Promise<void> => {
+    try {
+      await refresh();
+    } catch (caught: unknown) {
+      setError(errorMessage(caught, '一覧情報の再取得に失敗しました'));
+    }
+  }, [refresh]);
+
   useEffect(() => {
     if (api === undefined) return;
     let active = true;
@@ -272,7 +280,7 @@ export function useWorkspacePersistence(input: {
       const opened = loadOpenResponse(
         await api.openWorkspace(globalThis.crypto.randomUUID()),
       );
-      if (opened) await refresh();
+      if (opened) await refreshAfterSuccessfulLoad();
       return opened;
     } catch (caught: unknown) {
       setStatus('保存: 読込失敗');
@@ -281,7 +289,7 @@ export function useWorkspacePersistence(input: {
     } finally {
       setBusy(false);
     }
-  }, [api, loadOpenResponse, refresh]);
+  }, [api, loadOpenResponse, refreshAfterSuccessfulLoad]);
 
   const importCopy = useCallback(async (): Promise<void> => {
     if (api === undefined) return;
@@ -339,7 +347,7 @@ export function useWorkspacePersistence(input: {
             documentId,
           ),
         );
-        if (opened) await refresh();
+        if (opened) await refreshAfterSuccessfulLoad();
         return opened;
       } catch (caught: unknown) {
         setStatus('保存: 読込失敗');
@@ -349,7 +357,7 @@ export function useWorkspacePersistence(input: {
         setBusy(false);
       }
     },
-    [api, loadOpenResponse, refresh],
+    [api, loadOpenResponse, refreshAfterSuccessfulLoad],
   );
 
   const toggleFavorite = useCallback(
@@ -400,7 +408,7 @@ export function useWorkspacePersistence(input: {
           null,
         );
         setStatus('保存: 復元済み・未保存');
-        await refresh();
+        await refreshAfterSuccessfulLoad();
         return true;
       } catch (caught: unknown) {
         setStatus('保存: 復元失敗');
@@ -410,7 +418,7 @@ export function useWorkspacePersistence(input: {
         setBusy(false);
       }
     },
-    [api, applyBundle, recoveryCandidates, refresh],
+    [api, applyBundle, recoveryCandidates, refreshAfterSuccessfulLoad],
   );
 
   const discard = useCallback(
