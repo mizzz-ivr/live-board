@@ -28,14 +28,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Escape generated template literal
+      - name: Normalize generated confirmation message
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
           path = Path('scripts/apply-workspace-home.mjs')
           source = path.read_text(encoding='utf-8')
-          source = source.replace('${actionLabel}', r'\${actionLabel}')
+          source = source.replace(
+              "      `未保存の編集セッションを保持しています。${actionLabel}と現在の内容は置き換わります。続行しますか？`,",
+              "      '未保存の編集セッションを保持しています。' + actionLabel + 'と現在の内容は置き換わります。続行しますか？',",
+          )
           path.write_text(source, encoding='utf-8')
           PY
       - name: Apply workspace home changes
