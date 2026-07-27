@@ -19,6 +19,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react';
+import { resolveWorkspacePersistenceIdleStatus } from './workspace-persistence-status';
 
 const AUTOSAVE_DEBOUNCE_MS = 2_000;
 const APP_VERSION = '0.1.0';
@@ -232,7 +233,11 @@ export function useWorkspacePersistence(input: {
           saveAs,
         });
         if (response.canceled) {
-          setStatus(document === null ? '保存: 未保存' : '保存: 変更あり');
+          setStatus(resolveWorkspacePersistenceIdleStatus({
+            hasDocument: document !== null,
+            revision: revisionRef.current,
+            lastExplicitSaveRevision,
+          }));
           return;
         }
         if (response.document === undefined) {
@@ -250,7 +255,7 @@ export function useWorkspacePersistence(input: {
         setBusy(false);
       }
     },
-    [api, document, refresh],
+    [api, document, lastExplicitSaveRevision, refresh],
   );
 
   const loadOpenResponse = useCallback(
@@ -280,7 +285,15 @@ export function useWorkspacePersistence(input: {
       const opened = loadOpenResponse(
         await api.openWorkspace(globalThis.crypto.randomUUID()),
       );
-      if (opened) await refreshAfterSuccessfulLoad();
+      if (opened) {
+        await refreshAfterSuccessfulLoad();
+      } else {
+        setStatus(resolveWorkspacePersistenceIdleStatus({
+            hasDocument: document !== null,
+            revision: revisionRef.current,
+            lastExplicitSaveRevision,
+          }));
+      }
       return opened;
     } catch (caught: unknown) {
       setStatus('保存: 読込失敗');
@@ -289,7 +302,13 @@ export function useWorkspacePersistence(input: {
     } finally {
       setBusy(false);
     }
-  }, [api, loadOpenResponse, refreshAfterSuccessfulLoad]);
+  }, [
+    api,
+    document,
+    lastExplicitSaveRevision,
+    loadOpenResponse,
+    refreshAfterSuccessfulLoad,
+  ]);
 
   const importCopy = useCallback(async (): Promise<void> => {
     if (api === undefined) return;
@@ -347,7 +366,15 @@ export function useWorkspacePersistence(input: {
             documentId,
           ),
         );
-        if (opened) await refreshAfterSuccessfulLoad();
+        if (opened) {
+          await refreshAfterSuccessfulLoad();
+        } else {
+          setStatus(resolveWorkspacePersistenceIdleStatus({
+            hasDocument: document !== null,
+            revision: revisionRef.current,
+            lastExplicitSaveRevision,
+          }));
+        }
         return opened;
       } catch (caught: unknown) {
         setStatus('保存: 読込失敗');
@@ -357,7 +384,13 @@ export function useWorkspacePersistence(input: {
         setBusy(false);
       }
     },
-    [api, loadOpenResponse, refreshAfterSuccessfulLoad],
+    [
+      api,
+      document,
+      lastExplicitSaveRevision,
+      loadOpenResponse,
+      refreshAfterSuccessfulLoad,
+    ],
   );
 
   const toggleFavorite = useCallback(
