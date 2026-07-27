@@ -16,6 +16,11 @@ describe('workspace persistence idle status', () => {
       revision: 4,
       lastExplicitSaveRevision: 4,
     })).toBe('保存: 明示保存済み');
+    expect(resolveWorkspacePersistenceIdleStatus({
+      hasDocument: true,
+      revision: 0,
+      lastExplicitSaveRevision: 0,
+    })).toBe('保存: 明示保存済み');
   });
 
   it('documentがあってもrevisionが進んでいれば変更ありを返す', () => {
