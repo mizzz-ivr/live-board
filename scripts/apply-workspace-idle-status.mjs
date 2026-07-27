@@ -26,18 +26,27 @@ replaceOnce(
   `          setStatus(${idleStatusExpression});`,
 );
 
-const openSuccessBlock = `      if (opened) await refreshAfterSuccessfulLoad();
-      return opened;`;
-const openReplacement = `      if (opened) {
+replaceOnce(
+  `      if (opened) await refreshAfterSuccessfulLoad();
+      return opened;`,
+  `      if (opened) {
         await refreshAfterSuccessfulLoad();
       } else {
         setStatus(${idleStatusExpression});
       }
-      return opened;`;
-if (source.split(openSuccessBlock).length - 1 !== 2) {
-  throw new Error('WORKSPACE_IDLE_STATUS_OPEN_COUNT_INVALID');
-}
-source = source.replaceAll(openSuccessBlock, openReplacement);
+      return opened;`,
+);
+
+replaceOnce(
+  `        if (opened) await refreshAfterSuccessfulLoad();
+        return opened;`,
+  `        if (opened) {
+          await refreshAfterSuccessfulLoad();
+        } else {
+          setStatus(${idleStatusExpression});
+        }
+        return opened;`,
+);
 
 replaceOnce(
   '    [api, document, refresh],',
