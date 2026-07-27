@@ -15,7 +15,7 @@ Live Board は、配信者向けのローカル完結型リアルタイムペイ
 
 ## 現在の状態
 
-M3「保存・復旧・性能・配信操作性」に加え、画像Asset分離配信、Renderer–Main／OBS OverlayのLayer差分転送、Windows向け未署名RCパッケージ生成まで実装しています。
+M3「保存・復旧・性能・配信操作性」に加え、画像Asset分離配信、Renderer–Main／OBS OverlayのLayer差分転送、Windows向け未署名RCパッケージ生成、起動時のWorkspaceホームまで実装しています。
 
 実装済み:
 
@@ -73,6 +73,7 @@ M3「保存・復旧・性能・配信操作性」に加え、画像Asset分離�
 - クラッシュ復元候補の検証・復元・破棄
 - schemaVersion 0→1 migrationと未知schema拒否
 - Zip Slip・symlink・暗号化・CRC／SHA改ざん拒否
+- 起動直後のWorkspaceホーム、新規作成、最近使用、お気に入り、クラッシュ復元
 - 最近使用、お気に入り、複製、インポート
 - Alt＋左右・番号指定による配信ページ切り替え
 - 配信ページ固定と入力欄フォーカス中のショートカット抑止
@@ -112,6 +113,19 @@ pnpm dev:desktop
 
 Editor、OBS Protocol、Canvas Engine、OBS Bridge、ビルド済みOverlay、Electron Main / Preloadを起動します。
 RendererからNode.js APIへ直接アクセスできない構成です。
+
+### Workspaceホーム
+
+通常起動では最初にWorkspaceホームを表示します。
+
+- 新しいWorkspaceを作成
+- `.liveboard`ファイルを選択して開く
+- 最近使用したWorkspaceをお気に入り優先で表示
+- 検証済みクラッシュ復元候補を復元・破棄
+- 未保存の編集セッションをメモリ上に保持してホームとEditorを往復
+- Browser PreviewではファイルI/Oと復元操作を無効化
+
+ホーム表示中は配信ショートカットとRendererからMainへのOBS同期を停止し、Editorへ戻った時点で最新状態を再同期します。詳細は[ワークスペースホーム設計](docs/workspace-home.md)を参照してください。
 
 ### Windows配布パッケージ
 
@@ -307,6 +321,7 @@ pnpm dev:overlay
 - カスタムCSSは任意CSS互換ではなく、外部通信と危険構文を拒否する制限付きサブセットです。
 - 4K画像の126.56MiBはRGBA理論値で、実画像デコード・GPUコピー・Canvasキャッシュを含む実測値ではありません。
 - 28,800回試験は8時間相当の高速状態遷移シミュレーションで、ElectronとOBSを実時間8時間稼働した試験ではありません。
+- Workspaceホームは同一Renderer内の編集セッションを1件だけ保持します。複数Workspaceの同時編集、ファイル削除、OS上の名前変更は未対応です。
 - Windowsパッケージはコード未署名で、SmartScreen reputationを持ちません。正式配布には署名・リリース手順・ロールバック方針が必要です。
 - Windows Package CIのpackaged smoke testは永続化とloopback Overlay経路を確認しますが、実OBS、GPU、スリープ復帰、長時間操作の代替ではありません。
 - CI artifactはソースhead SHAへ紐付けて14日保持し、GitHub Releaseへ自動公開しません。
@@ -351,6 +366,7 @@ packages/
 - [データモデル](docs/data-model.md)
 - [セキュリティ](docs/security.md)
 - [永続化・自動保存・クラッシュ復元](docs/persistence.md)
+- [ワークスペースホーム](docs/workspace-home.md)
 - [画像Assetのloopback HTTP配信](docs/asset-http-delivery.md)
 - [Renderer–Main Asset一回登録](docs/ipc-asset-registration.md)
 - [Renderer–Main Layer差分転送](docs/ipc-layer-patch.md)
