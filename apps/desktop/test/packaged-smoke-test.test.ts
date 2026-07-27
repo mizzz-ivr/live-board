@@ -15,7 +15,7 @@ afterEach(async () => {
 });
 
 describe('packaged smoke test', () => {
-  it('Renderer・永続化・loopback Overlay経路を確認する', async () => {
+  it('同一プロセスでRenderer・永続化・loopback Overlay経路を反復確認する', async () => {
     const root = await createPackagedFixture();
     const currentDirectory = join(root, 'app.asar', 'dist-electron');
     const resourcesPath = join(root, 'resources');
@@ -24,20 +24,35 @@ describe('packaged smoke test', () => {
       currentDirectory,
       resourcesPath,
       version: '0.1.0-test',
+      iterations: 2,
     });
 
     expect(result).toMatchObject({
       ok: true,
       version: '0.1.0-test',
+      iterations: 2,
       host: '127.0.0.1',
       overlayStatus: 200,
     });
     expect(result.port).toBeGreaterThan(0);
+    expect(result.firstRssBytes).toBeGreaterThan(0);
+    expect(result.lastRssBytes).toBeGreaterThan(0);
+    expect(result.maxRssBytes).toBeGreaterThanOrEqual(result.firstRssBytes);
+    expect(Number.isSafeInteger(result.rssGrowthBytes)).toBe(true);
+    expect(result.maxIterationDurationMs).toBeGreaterThanOrEqual(0);
+    expect(result.p95IterationDurationMs).toBeGreaterThanOrEqual(0);
     expect(Object.keys(result).sort()).toEqual([
+      'firstRssBytes',
       'host',
+      'iterations',
+      'lastRssBytes',
+      'maxIterationDurationMs',
+      'maxRssBytes',
       'ok',
       'overlayStatus',
+      'p95IterationDurationMs',
       'port',
+      'rssGrowthBytes',
       'version',
     ]);
   });
@@ -50,6 +65,17 @@ describe('packaged smoke test', () => {
       resourcesPath: join(root, 'resources'),
       version: '0.1.0-test',
     })).rejects.toThrow('PACKAGED_SMOKE_RESOURCE_MISSING');
+  });
+
+  it.each([0, -1, 1.5, 501])('不正な反復回数%sを拒否する', async (iterations) => {
+    const root = await createPackagedFixture();
+
+    await expect(runPackagedSmokeTest({
+      currentDirectory: join(root, 'app.asar', 'dist-electron'),
+      resourcesPath: join(root, 'resources'),
+      version: '0.1.0-test',
+      iterations,
+    })).rejects.toThrow('PACKAGED_SMOKE_ITERATIONS_INVALID');
   });
 });
 

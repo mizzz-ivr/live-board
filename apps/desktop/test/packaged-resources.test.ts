@@ -14,29 +14,60 @@ describe('packaged resources', () => {
     });
   });
 
-  it('smoke testと出力先を解析する', () => {
+  it('smoke test・出力先・反復回数を解析する', () => {
     expect(parsePackagedSmokeArguments([
       'LiveBoard.exe',
       '--smoke-test',
       '--smoke-output=C:/temp/result.json',
+      '--smoke-iterations=100',
     ])).toEqual({
       enabled: true,
       outputPath: 'C:/temp/result.json',
+      iterations: 100,
+    });
+    expect(parsePackagedSmokeArguments([
+      'LiveBoard.exe',
+      '--smoke-test',
+    ])).toEqual({
+      enabled: true,
+      outputPath: undefined,
+      iterations: 1,
     });
   });
 
-  it('smoke testなしの出力指定と重複指定を拒否する', () => {
+  it('smoke testなしの出力・反復指定と重複指定を拒否する', () => {
     expect(() => parsePackagedSmokeArguments([
       'LiveBoard.exe',
       '--smoke-output=C:/temp/result.json',
     ])).toThrow('PACKAGED_SMOKE_OUTPUT_WITHOUT_TEST');
     expect(() => parsePackagedSmokeArguments([
       'LiveBoard.exe',
+      '--smoke-iterations=2',
+    ])).toThrow('PACKAGED_SMOKE_ITERATIONS_WITHOUT_TEST');
+    expect(() => parsePackagedSmokeArguments([
+      'LiveBoard.exe',
       '--smoke-test',
       '--smoke-output=a.json',
       '--smoke-output=b.json',
     ])).toThrow('PACKAGED_SMOKE_OUTPUT_DUPLICATED');
+    expect(() => parsePackagedSmokeArguments([
+      'LiveBoard.exe',
+      '--smoke-test',
+      '--smoke-iterations=1',
+      '--smoke-iterations=2',
+    ])).toThrow('PACKAGED_SMOKE_ITERATIONS_DUPLICATED');
   });
+
+  it.each(['0', '-1', '1.5', 'abc', '501'])(
+    '不正な反復回数%sを拒否する',
+    (iterations) => {
+      expect(() => parsePackagedSmokeArguments([
+        'LiveBoard.exe',
+        '--smoke-test',
+        `--smoke-iterations=${iterations}`,
+      ])).toThrow('PACKAGED_SMOKE_ITERATIONS_INVALID');
+    },
+  );
 
   it('空のリソースパスを拒否する', () => {
     expect(() => resolvePackagedResourcePaths('', '/resources')).toThrow(
