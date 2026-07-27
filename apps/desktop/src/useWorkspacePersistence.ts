@@ -1,5 +1,6 @@
 import {
   createCanvasWorkspaceCommandState,
+  createEmptyWorkspace,
   type CanvasWorkspaceCommandState,
   type ProjectAssetLibrary,
 } from '@live-board/domain';
@@ -31,14 +32,16 @@ export interface WorkspacePersistenceController {
   recentDocuments: PublicDocumentRecord[];
   recoveryCandidates: PublicRecoveryCandidate[];
   revision: number;
+  hasUnsavedChanges: boolean;
+  createNew(): void;
   save(): Promise<void>;
   saveAs(): Promise<void>;
-  open(): Promise<void>;
+  open(): Promise<boolean>;
   importCopy(): Promise<void>;
   duplicateCurrent(): void;
-  openRecent(documentId: string): Promise<void>;
+  openRecent(documentId: string): Promise<boolean>;
   toggleFavorite(documentId: string, favorite: boolean): Promise<void>;
-  restore(candidateId: string): Promise<void>;
+  restore(candidateId: string): Promise<boolean>;
   discard(candidateId: string): Promise<void>;
   refresh(): Promise<void>;
 }
@@ -63,6 +66,9 @@ export function useWorkspacePersistence(input: {
     PublicRecoveryCandidate[]
   >([]);
   const [revision, setRevision] = useState(0);
+  const [lastExplicitSaveRevision, setLastExplicitSaveRevision] = useState<
+    number | null
+  >(null);
   const revisionRef = useRef(0);
   const suppressNextChangeRef = useRef(false);
   const workspaceRef = useRef(input.commandState.workspace);
@@ -178,6 +184,7 @@ export function useWorkspacePersistence(input: {
       suppressNextChangeRef.current = true;
       revisionRef.current = 0;
       setRevision(0);
+      setLastExplicitSaveRevision(nextDocument === null ? null : 0);
       input.setCommandState(createCanvasWorkspaceCommandState(bundle.workspace));
       input.setAssetLibraries(bundle.assetLibraries);
       setDocument(nextDocument);
@@ -186,6 +193,17 @@ export function useWorkspacePersistence(input: {
     },
     [input.setAssetLibraries, input.setCommandState],
   );
+
+  const createNew = useCallback((): void => {
+    applyBundle(
+      {
+        workspace: createEmptyWorkspace(createWorkspaceId('new')),
+        assetLibraries: {},
+      },
+      null,
+    );
+    setStatus('保存: 新規作成・未保存');
+  }, [applyBundle]);
 
   const saveWithMode = useCallback(
     async (saveAs: boolean): Promise<void> => {
@@ -213,6 +231,7 @@ export function useWorkspacePersistence(input: {
           throw new Error('保存結果にdocumentがありません');
         }
         setDocument(response.document);
+        setLastExplicitSaveRevision(revisionRef.current);
         setStatus('保存: 明示保存済み');
         setError(null);
         await refresh();
@@ -227,8 +246,8 @@ export function useWorkspacePersistence(input: {
   );
 
   const loadOpenResponse = useCallback(
-    (response: WorkspaceOpenResponse): void => {
-      if (response.canceled) return;
+    (response: WorkspaceOpenResponse): boolean => {
+      if (response.canceled) return false;
       if (response.archive === undefined || response.document === undefined) {
         throw new Error('読込結果が不完全です');
       }
@@ -240,22 +259,25 @@ export function useWorkspacePersistence(input: {
         },
         response.document,
       );
+      return true;
     },
     [applyBundle],
   );
 
-  const open = useCallback(async (): Promise<void> => {
-    if (api === undefined) return;
+  const open = useCallback(async (): Promise<boolean> => {
+    if (api === undefined) return false;
     setBusy(true);
     setStatus('保存: 読込中');
     try {
-      loadOpenResponse(
+      const opened = loadOpenResponse(
         await api.openWorkspace(globalThis.crypto.randomUUID()),
       );
-      await refresh();
+      if (opened) await refresh();
+      return opened;
     } catch (caught: unknown) {
       setStatus('保存: 読込失敗');
       setError(errorMessage(caught, 'ワークスペースの読込に失敗しました'));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -306,21 +328,23 @@ export function useWorkspacePersistence(input: {
   }, [applyBundle]);
 
   const openRecent = useCallback(
-    async (documentId: string): Promise<void> => {
-      if (api === undefined) return;
+    async (documentId: string): Promise<boolean> => {
+      if (api === undefined) return false;
       setBusy(true);
       setStatus('保存: 最近使用を読込中');
       try {
-        loadOpenResponse(
+        const opened = loadOpenResponse(
           await api.openRecentWorkspace(
             globalThis.crypto.randomUUID(),
             documentId,
           ),
         );
-        await refresh();
+        if (opened) await refresh();
+        return opened;
       } catch (caught: unknown) {
         setStatus('保存: 読込失敗');
         setError(errorMessage(caught, '最近使用したファイルを開けませんでした'));
+        return false;
       } finally {
         setBusy(false);
       }
@@ -331,6 +355,7 @@ export function useWorkspacePersistence(input: {
   const toggleFavorite = useCallback(
     async (documentId: string, favorite: boolean): Promise<void> => {
       if (api === undefined) return;
+      setBusy(true);
       try {
         await api.setWorkspaceFavorite(
           globalThis.crypto.randomUUID(),
@@ -340,22 +365,33 @@ export function useWorkspacePersistence(input: {
         await refresh();
       } catch (caught: unknown) {
         setError(errorMessage(caught, 'お気に入りの更新に失敗しました'));
+      } finally {
+        setBusy(false);
       }
     },
     [api, refresh],
   );
 
   const restore = useCallback(
-    async (candidateId: string): Promise<void> => {
-      if (api === undefined) return;
+    async (candidateId: string): Promise<boolean> => {
+      if (api === undefined) return false;
       setBusy(true);
       setStatus('保存: 復元中');
       try {
+        const candidate = recoveryCandidates.find(
+          (item) => item.candidateId === candidateId,
+        );
+        if (candidate === undefined) throw new Error('復元候補が見つかりません');
         const response = await api.loadRecoveryCandidate(
           globalThis.crypto.randomUUID(),
           candidateId,
         );
         const loaded = loadLiveboardArchive(response.archive);
+        await api.discardRecoveryCandidate(
+          globalThis.crypto.randomUUID(),
+          candidateId,
+          candidate.revision,
+        );
         applyBundle(
           {
             workspace: loaded.workspace,
@@ -363,39 +399,48 @@ export function useWorkspacePersistence(input: {
           },
           null,
         );
-        await api.discardRecoveryCandidate(
-          globalThis.crypto.randomUUID(),
-          candidateId,
-          revisionRef.current,
-        );
         setStatus('保存: 復元済み・未保存');
         await refresh();
+        return true;
       } catch (caught: unknown) {
         setStatus('保存: 復元失敗');
         setError(errorMessage(caught, 'クラッシュ復元に失敗しました'));
+        return false;
       } finally {
         setBusy(false);
       }
     },
-    [api, applyBundle, refresh],
+    [api, applyBundle, recoveryCandidates, refresh],
   );
 
   const discard = useCallback(
     async (candidateId: string): Promise<void> => {
       if (api === undefined) return;
+      setBusy(true);
       try {
+        const candidate = recoveryCandidates.find(
+          (item) => item.candidateId === candidateId,
+        );
+        if (candidate === undefined) throw new Error('復元候補が見つかりません');
         await api.discardRecoveryCandidate(
           globalThis.crypto.randomUUID(),
           candidateId,
-          revisionRef.current,
+          candidate.revision,
         );
         await refresh();
       } catch (caught: unknown) {
         setError(errorMessage(caught, '復元候補の破棄に失敗しました'));
+      } finally {
+        setBusy(false);
       }
     },
-    [api, refresh],
+    [api, recoveryCandidates, refresh],
   );
+
+  const hasUnsavedChanges =
+    document === null ||
+    lastExplicitSaveRevision === null ||
+    revision !== lastExplicitSaveRevision;
 
   return {
     enabled: api !== undefined,
@@ -406,6 +451,8 @@ export function useWorkspacePersistence(input: {
     recentDocuments,
     recoveryCandidates,
     revision,
+    hasUnsavedChanges,
+    createNew,
     save: () => saveWithMode(false),
     saveAs: () => saveWithMode(true),
     open,

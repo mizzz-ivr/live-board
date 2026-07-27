@@ -30,6 +30,7 @@ interface UseBroadcastControlsOptions {
   commandState: CanvasWorkspaceCommandState;
   setCommandState: Dispatch<SetStateAction<CanvasWorkspaceCommandState>>;
   projectId: string;
+  enabled?: boolean;
 }
 
 export interface BroadcastControlsController {
@@ -50,6 +51,7 @@ export function useBroadcastControls({
   commandState,
   setCommandState,
   projectId,
+  enabled = true,
 }: UseBroadcastControlsOptions): BroadcastControlsController {
   const stateRef = useRef(commandState);
   stateRef.current = commandState;
@@ -167,6 +169,7 @@ export function useBroadcastControls({
   );
 
   useEffect(() => {
+    if (!enabled) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (isEditableTarget(event.target)) return;
       const action = resolveBroadcastShortcut(event);
@@ -177,7 +180,7 @@ export function useBroadcastControls({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [navigate, toggleLock]);
+  }, [enabled, navigate, toggleLock]);
 
   return {
     settings,

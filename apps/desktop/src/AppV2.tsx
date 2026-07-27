@@ -74,6 +74,7 @@ import { CanvasSurfaceV2 } from './CanvasSurfaceV2';
 import { LayerPanel } from './LayerPanel';
 import { PageThumbnail } from './PageThumbnail';
 import { RichLayerInspector } from './RichLayerInspector';
+import { WorkspaceHome } from './WorkspaceHome';
 import { WorkspacePersistencePanel } from './WorkspacePersistencePanel';
 import { useBroadcastControls } from './useBroadcastControls';
 import { useWorkspacePersistence } from './useWorkspacePersistence';
@@ -121,6 +122,9 @@ const SELECTION_TOOLS: Array<{ id: SelectionMode; label: string }> = [
 ];
 
 type CopyStatus = 'idle' | 'copied' | 'error';
+type ApplicationSurface = 'home' | 'editor';
+
+const E2E_START_SURFACE_KEY = 'live-board:e2e-start-surface';
 
 export function AppV2() {
   const runtime = window.liveBoard?.getRuntimeInfo();
@@ -133,6 +137,10 @@ export function AppV2() {
   const [broadcastRevision, setBroadcastRevision] = useState<number | null>(null);
   const [broadcastSyncError, setBroadcastSyncError] = useState(false);
   const [copyStatus, setCopyStatus] = useState<CopyStatus>('idle');
+  const [surface, setSurface] = useState<ApplicationSurface>(initialApplicationSurface);
+  const [hasEditorSession, setHasEditorSession] = useState(
+    initialApplicationSurface() === 'editor',
+  );
   const [toolId, setToolId] = useState<CanvasToolId>('pen');
   const [selectionMode, setSelectionMode] = useState<SelectionMode | null>(null);
   const [selection, setSelection] = useState<CanvasSelection | null>(null);
@@ -159,6 +167,7 @@ export function AppV2() {
     commandState,
     setCommandState,
     projectId: project.id,
+    enabled: surface === 'editor',
   });
   const editPage =
     project.pages.find((candidate) => candidate.id === project.activeEditPageId) ??
@@ -226,7 +235,11 @@ export function AppV2() {
 
   useEffect(() => {
     const liveBoardApi = window.liveBoard;
-    if (liveBoardApi === undefined || securityStatus === null) return;
+    if (
+      surface !== 'editor' ||
+      liveBoardApi === undefined ||
+      securityStatus === null
+    ) return;
     let active = true;
     const revision = nextBroadcastRevisionRef.current;
     nextBroadcastRevisionRef.current += 1;
@@ -271,6 +284,7 @@ export function AppV2() {
       active = false;
     };
   }, [
+    surface,
     securityStatus,
     project.id,
     broadcastPage.id,
@@ -443,9 +457,80 @@ export function AppV2() {
     }
   }
 
+  function resetEditorPresentation(): void {
+    setSelection(null);
+    setSelectionMode(null);
+    setViewport(DEFAULT_CANVAS_VIEWPORT);
+    setAssetError(null);
+    setDomainError(null);
+    setBroadcastRevision(null);
+    registeredBroadcastAssetHashesRef.current.clear();
+  }
+
+  function enterEditor(): void {
+    resetEditorPresentation();
+    setHasEditorSession(true);
+    setSurface('editor');
+  }
+
+  function confirmWorkspaceReplacement(actionLabel: string): boolean {
+    if (!hasEditorSession || !persistence.hasUnsavedChanges) return true;
+    return window.confirm(
+      '未保存の編集セッションを保持しています。' + actionLabel + 'と現在の内容は置き換わります。続行しますか？',
+    );
+  }
+
+  function createWorkspaceFromHome(): void {
+    if (!confirmWorkspaceReplacement('新しいワークスペースを作成する')) return;
+    persistence.createNew();
+    enterEditor();
+  }
+
+  async function openWorkspaceFromHome(): Promise<void> {
+    if (!confirmWorkspaceReplacement('ファイルを開く')) return;
+    if (await persistence.open()) enterEditor();
+  }
+
+  async function openRecentFromHome(documentId: string): Promise<void> {
+    if (!confirmWorkspaceReplacement('最近使用したワークスペースを開く')) return;
+    if (await persistence.openRecent(documentId)) enterEditor();
+  }
+
+  async function restoreFromHome(candidateId: string): Promise<void> {
+    if (!confirmWorkspaceReplacement('クラッシュ復元を実行する')) return;
+    if (await persistence.restore(candidateId)) enterEditor();
+  }
+
+  function returnToHome(): void {
+    if (
+      persistence.hasUnsavedChanges &&
+      !window.confirm(
+        '未保存の変更は破棄せずメモリ上に保持したままホームへ戻ります。続行しますか？',
+      )
+    ) {
+      return;
+    }
+    setSurface('home');
+  }
+
   const layerPanelSetter = setCommandState as unknown as Dispatch<
     SetStateAction<LayerWorkspaceCommandState>
   >;
+
+  if (surface === 'home') {
+    return (
+      <WorkspaceHome
+        controller={persistence}
+        currentWorkspaceName={workspace.name}
+        hasEditorSession={hasEditorSession}
+        onContinueEditing={() => setSurface('editor')}
+        onCreateNew={createWorkspaceFromHome}
+        onOpen={openWorkspaceFromHome}
+        onOpenRecent={openRecentFromHome}
+        onRestore={restoreFromHome}
+      />
+    );
+  }
 
   return (
     <div className="app-shell">
@@ -455,6 +540,7 @@ export function AppV2() {
           <p>{workspace.name}</p>
         </div>
         <div className="topbar-actions">
+          <button type="button" onClick={returnToHome}>ホーム</button>
           <span className="status-dot" aria-hidden="true" />
           <span>{obsBridgeLabel}</span>
           <span>{broadcastSyncLabel}</span>
@@ -1137,6 +1223,16 @@ function duplicateLayerDocument(
     activeLayerId:
       source.activeLayerId === null ? null : idMap.get(source.activeLayerId)!,
   };
+}
+
+function initialApplicationSurface(): ApplicationSurface {
+  try {
+    return window.localStorage.getItem(E2E_START_SURFACE_KEY) === 'editor'
+      ? 'editor'
+      : 'home';
+  } catch {
+    return 'home';
+  }
 }
 
 function createEntityId(prefix: string): string {
