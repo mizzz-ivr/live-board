@@ -59,6 +59,25 @@ describe('workspace home model', () => {
     expect(new Set(sorted.map((document) => document.documentId)).size).toBe(100);
   });
 
+  it('お気に入り・日時・表示名が同じ場合はdocument IDで整列する', () => {
+    const timestamp = '2026-07-27T00:00:00.000Z';
+    const documents = [3, 1, 2].map((index) =>
+      documentRecord(index, {
+        displayName: '同名Workspace',
+        favorite: true,
+        lastOpenedAt: timestamp,
+      }),
+    );
+
+    expect(
+      sortRecentWorkspaceDocuments(documents).map((document) => document.documentId),
+    ).toEqual([
+      documentRecord(1).documentId,
+      documentRecord(2).documentId,
+      documentRecord(3).documentId,
+    ]);
+  });
+
   it('不正日時を安全な表示へフォールバックする', () => {
     expect(formatHomeTimestamp('invalid')).toBe('日時不明');
     expect(formatHomeTimestamp('')).toBe('日時不明');
