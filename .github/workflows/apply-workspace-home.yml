@@ -1,15 +1,22 @@
 name: Apply workspace home
 
 on:
-  push:
+  pull_request:
     branches:
-      - feat/workspace-home
+      - main
     paths:
       - '.github/workflows/apply-workspace-home.yml'
       - 'scripts/apply-workspace-home.mjs'
+      - 'apps/desktop/src/WorkspaceHome.tsx'
+      - 'apps/desktop/src/workspace-home.css'
+      - 'apps/desktop/src/workspace-home-model.ts'
 
 permissions:
   contents: write
+
+concurrency:
+  group: apply-workspace-home-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   apply:
