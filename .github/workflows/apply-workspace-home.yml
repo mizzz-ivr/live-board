@@ -1,0 +1,36 @@
+name: Apply workspace home
+
+on:
+  push:
+    branches:
+      - feat/workspace-home
+    paths:
+      - '.github/workflows/apply-workspace-home.yml'
+      - 'scripts/apply-workspace-home.mjs'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/workspace-home
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply workspace home changes
+        run: node scripts/apply-workspace-home.mjs
+      - name: Remove temporary files
+        run: |
+          rm .github/workflows/apply-workspace-home.yml
+          rm scripts/apply-workspace-home.mjs
+      - name: Commit changes
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "ワークスペースホームを既存Editorへ接続"
+          git push origin HEAD:feat/workspace-home
