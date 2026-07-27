@@ -67,6 +67,8 @@ Canvas、Layer、OBS Protocol、`.liveboard`形式、Electron IPC contractは変
 
 新規作成直後は未保存状態です。以降の明示保存・自動保存は既存フローへ合流します。
 
+ホームの`hasUnsavedChanges`は、現在revisionと最後に明示保存したrevisionを比較します。2秒debounceの自動保存はクラッシュ復元用Snapshotであり、ユーザーが選択した`.liveboard`ファイルへの明示保存とは扱いません。そのため、自動保存成功後も明示保存していない変更はホーム上で未保存として表示します。
+
 ## 5. 最近使用とお気に入り
 
 Rendererへ渡す情報は既存`PublicDocumentRecord`だけです。
