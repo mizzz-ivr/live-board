@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { WorkspacePersistenceController } from './useWorkspacePersistence';
 import {
   formatHomeTimestamp,
@@ -36,6 +36,7 @@ export function WorkspaceHome({
   onRestore(candidateId: string): Promise<void>;
 }) {
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const actionPendingRef = useRef(false);
   const recentDocuments = useMemo(
     () => sortRecentWorkspaceDocuments(controller.recentDocuments),
     [controller.recentDocuments],
@@ -46,11 +47,13 @@ export function WorkspaceHome({
     action: Exclude<PendingAction, null>,
     callback: () => void | Promise<void>,
   ): Promise<void> {
-    if (operationPending) return;
+    if (controller.busy || actionPendingRef.current) return;
+    actionPendingRef.current = true;
     setPendingAction(action);
     try {
       await callback();
     } finally {
+      actionPendingRef.current = false;
       setPendingAction(null);
     }
   }
