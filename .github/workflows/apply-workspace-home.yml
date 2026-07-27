@@ -33,10 +33,10 @@ jobs:
         shell: bash
         run: |
           set +e
-          node scripts/apply-workspace-home.mjs > apply-workspace-home-error.log 2>&1
+          node scripts/apply-workspace-home.mjs > apply-workspace-home-error.txt 2>&1
           status=$?
           set -e
-          cat apply-workspace-home-error.log
+          cat apply-workspace-home-error.txt
           echo "status=$status" >> "$GITHUB_OUTPUT"
       - name: Record diagnostic failure
         if: steps.apply.outputs.status != '0'
@@ -44,7 +44,7 @@ jobs:
           git restore apps playwright.config.ts
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add apply-workspace-home-error.log
+          git add apply-workspace-home-error.txt
           git commit -m "ワークスペースホーム接続の診断ログを記録"
           git push origin HEAD:feat/workspace-home
           exit 1
@@ -53,7 +53,7 @@ jobs:
         run: |
           rm .github/workflows/apply-workspace-home.yml
           rm scripts/apply-workspace-home.mjs
-          rm apply-workspace-home-error.log
+          rm apply-workspace-home-error.txt
       - name: Commit changes
         if: steps.apply.outputs.status == '0'
         run: |
