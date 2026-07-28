@@ -19,7 +19,10 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react';
-import { resolveWorkspacePersistenceIdleStatus } from './workspace-persistence-status';
+import {
+  resolveWorkspacePersistenceIdleStatus,
+  resolveWorkspacePersistenceSaveCompletion,
+} from './workspace-persistence-status';
 
 const AUTOSAVE_DEBOUNCE_MS = 2_000;
 const APP_VERSION = '0.1.0';
@@ -220,6 +223,7 @@ export function useWorkspacePersistence(input: {
       setBusy(true);
       setStatus('保存: 保存中');
       try {
+        const savedRevision = revisionRef.current;
         const archive = createCurrentArchive(
           workspaceRef.current,
           assetLibrariesRef.current,
@@ -227,7 +231,7 @@ export function useWorkspacePersistence(input: {
         const response = await api.saveWorkspace({
           requestId: globalThis.crypto.randomUUID(),
           workspaceId: workspaceRef.current.id,
-          revision: revisionRef.current,
+          revision: savedRevision,
           archive,
           documentId: saveAs ? undefined : document?.documentId,
           saveAs,
@@ -243,9 +247,13 @@ export function useWorkspacePersistence(input: {
         if (response.document === undefined) {
           throw new Error('保存結果にdocumentがありません');
         }
+        const completion = resolveWorkspacePersistenceSaveCompletion({
+          currentRevision: revisionRef.current,
+          savedRevision,
+        });
         setDocument(response.document);
-        setLastExplicitSaveRevision(revisionRef.current);
-        setStatus('保存: 明示保存済み');
+        setLastExplicitSaveRevision(completion.lastExplicitSaveRevision);
+        setStatus(completion.status);
         setError(null);
         await refresh();
       } catch (caught: unknown) {

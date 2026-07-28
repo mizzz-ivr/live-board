@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { resolveWorkspacePersistenceIdleStatus } from '../src/workspace-persistence-status';
+import {
+  resolveWorkspacePersistenceIdleStatus,
+  resolveWorkspacePersistenceSaveCompletion,
+} from '../src/workspace-persistence-status';
 
 describe('workspace persistence idle status', () => {
   it('documentがない場合は未保存を返す', () => {
@@ -34,5 +37,27 @@ describe('workspace persistence idle status', () => {
       revision: 0,
       lastExplicitSaveRevision: null,
     })).toBe('保存: 変更あり');
+  });
+});
+
+describe('workspace explicit save completion', () => {
+  it('保存中に編集がなければ保存対象revisionを明示保存済みとして返す', () => {
+    expect(resolveWorkspacePersistenceSaveCompletion({
+      currentRevision: 4,
+      savedRevision: 4,
+    })).toEqual({
+      lastExplicitSaveRevision: 4,
+      status: '保存: 明示保存済み',
+    });
+  });
+
+  it('保存中にrevisionが進んだ場合は保存開始時revisionだけを保存済みとして返す', () => {
+    expect(resolveWorkspacePersistenceSaveCompletion({
+      currentRevision: 5,
+      savedRevision: 4,
+    })).toEqual({
+      lastExplicitSaveRevision: 4,
+      status: '保存: 変更あり',
+    });
   });
 });
