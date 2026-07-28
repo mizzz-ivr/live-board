@@ -12,3 +12,20 @@ export function resolveWorkspacePersistenceIdleStatus(input: {
   }
   return '保存: 変更あり';
 }
+
+export function resolveWorkspacePersistenceSaveCompletion(input: {
+  currentRevision: number;
+  savedRevision: number;
+}): {
+  lastExplicitSaveRevision: number;
+  status: string;
+} {
+  return {
+    lastExplicitSaveRevision: input.savedRevision,
+    status: resolveWorkspacePersistenceIdleStatus({
+      hasDocument: true,
+      revision: input.currentRevision,
+      lastExplicitSaveRevision: input.savedRevision,
+    }),
+  };
+}
