@@ -16,6 +16,17 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         baseURL: 'http://127.0.0.1:4173',
+        storageState: {
+          cookies: [],
+          origins: [
+            {
+              origin: 'http://127.0.0.1:4173',
+              localStorage: [
+                { name: 'live-board:e2e-start-surface', value: 'editor' },
+              ],
+            },
+          ],
+        },
       },
       testMatch: /desktop.*\.spec\.ts/,
     },
