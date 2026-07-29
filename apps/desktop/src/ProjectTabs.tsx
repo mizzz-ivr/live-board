@@ -13,9 +13,13 @@ export interface ProjectTabsProps {
   projects: readonly Project[];
   activeProjectId: string;
   hasUnsavedChanges: boolean;
+  canUndoProjectAdd: boolean;
+  canRedoProjectAdd: boolean;
   onTabsChange: Dispatch<SetStateAction<ProjectTabsState>>;
   onSelect(projectId: string): void;
   onCreate(): void;
+  onUndoProjectAdd(): void;
+  onRedoProjectAdd(): void;
 }
 
 export function ProjectTabs({
@@ -23,9 +27,13 @@ export function ProjectTabs({
   projects,
   activeProjectId,
   hasUnsavedChanges,
+  canUndoProjectAdd,
+  canRedoProjectAdd,
   onTabsChange,
   onSelect,
   onCreate,
+  onUndoProjectAdd,
+  onRedoProjectAdd,
 }: ProjectTabsProps) {
   const projectIds = useMemo(() => projects.map((project) => project.id), [projects]);
   const tabRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -104,6 +112,22 @@ export function ProjectTabs({
             ? 'ワークスペースに未保存の変更あり'
             : 'ワークスペース保存済み'}
         </span>
+        <button
+          type="button"
+          aria-label="Project追加を元に戻す"
+          disabled={!canUndoProjectAdd}
+          onClick={onUndoProjectAdd}
+        >
+          追加を元に戻す
+        </button>
+        <button
+          type="button"
+          aria-label="Project追加をやり直す"
+          disabled={!canRedoProjectAdd}
+          onClick={onRedoProjectAdd}
+        >
+          追加をやり直す
+        </button>
         <button type="button" onClick={reopen} disabled={!canReopen}>
           閉じたタブを復元
         </button>

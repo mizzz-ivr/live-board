@@ -2,6 +2,7 @@ const RECENTLY_CLOSED_LIMIT = 10;
 
 export interface ProjectTabsState {
   workspaceId: string;
+  sessionRevision: number;
   openProjectIds: string[];
   recentlyClosedProjectIds: string[];
 }
@@ -9,9 +10,11 @@ export interface ProjectTabsState {
 export function createProjectTabsState(
   workspaceId: string,
   projectIds: readonly string[],
+  sessionRevision = 0,
 ): ProjectTabsState {
   return {
     workspaceId,
+    sessionRevision,
     openProjectIds: [...projectIds],
     recentlyClosedProjectIds: [],
   };
@@ -22,9 +25,13 @@ export function synchronizeProjectTabsState(
   workspaceId: string,
   projectIds: readonly string[],
   activeProjectId: string,
+  sessionRevision = 0,
 ): ProjectTabsState {
-  if (state.workspaceId !== workspaceId) {
-    return createProjectTabsState(workspaceId, projectIds);
+  if (
+    state.workspaceId !== workspaceId ||
+    state.sessionRevision !== sessionRevision
+  ) {
+    return createProjectTabsState(workspaceId, projectIds, sessionRevision);
   }
 
   const availableIds = new Set(projectIds);
@@ -54,6 +61,7 @@ export function synchronizeProjectTabsState(
 
   return {
     workspaceId,
+    sessionRevision,
     openProjectIds: nextOpenProjectIds,
     recentlyClosedProjectIds: nextRecentlyClosedProjectIds,
   };

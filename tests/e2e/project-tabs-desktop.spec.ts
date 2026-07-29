@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('Projectタブを追加・切り替え・閉じる・ホーム往復後に復元できる', async ({
+test('Projectタブを追加・Undo・切り替え・閉じる・ホーム往復後に復元できる', async ({
   page,
 }) => {
   await page.goto('/');
@@ -15,6 +15,13 @@ test('Projectタブを追加・切り替え・閉じる・ホーム往復後に�
   const secondTab = tablist.getByRole('tab', { name: /プロジェクト 2/ });
   await expect(secondTab).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByText('ワークスペースに未保存の変更あり')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Project追加を元に戻す' }).click();
+  await expect(tablist.getByRole('tab')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Project追加をやり直す' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Project追加をやり直す' }).click();
+  await expect(tablist.getByRole('tab')).toHaveCount(2);
+  await expect(secondTab).toHaveAttribute('aria-selected', 'true');
 
   await firstTab.click();
   await expect(firstTab).toHaveAttribute('aria-selected', 'true');

@@ -13,7 +13,29 @@ describe('project tabs model', () => {
     const next = synchronizeProjectTabsState(state, 'workspace-2', ['p3', 'p4'], 'p3');
     expect(next).toEqual({
       workspaceId: 'workspace-2',
+      sessionRevision: 0,
       openProjectIds: ['p3', 'p4'],
+      recentlyClosedProjectIds: [],
+    });
+  });
+
+  it('同じWorkspace IDでも読込セッションが変われば全Projectを開き直す', () => {
+    const state = closeProjectTab(
+      createProjectTabsState('workspace-1', ['p1', 'p2'], 3),
+      'p2',
+      'p1',
+    ).state;
+    const next = synchronizeProjectTabsState(
+      state,
+      'workspace-1',
+      ['p1', 'p2'],
+      'p1',
+      4,
+    );
+    expect(next).toEqual({
+      workspaceId: 'workspace-1',
+      sessionRevision: 4,
+      openProjectIds: ['p1', 'p2'],
       recentlyClosedProjectIds: [],
     });
   });
