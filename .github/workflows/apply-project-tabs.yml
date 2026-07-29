@@ -1,0 +1,32 @@
+name: Apply Project Tabs
+
+on:
+  push:
+    branches:
+      - feat/project-tabs
+    paths:
+      - .github/workflows/apply-project-tabs.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: feat/project-tabs
+          fetch-depth: 0
+
+      - name: Apply implementation
+        run: python .github/scripts/apply-project-tabs.py
+
+      - name: Commit implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Projectタブの切り替え・閉じる・復元を追加"
+          git push origin HEAD:feat/project-tabs
