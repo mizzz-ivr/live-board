@@ -1,0 +1,32 @@
+name: Bound Redo Related Histories
+
+on:
+  push:
+    branches:
+      - feat/project-tabs
+    paths:
+      - .github/workflows/bound-redo-related-histories.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: feat/project-tabs
+          fetch-depth: 0
+
+      - name: Apply related history accounting
+        run: python .github/scripts/bound-redo-related-histories.py
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Redo関連履歴をメモリ上限へ含める"
+          git push origin HEAD:feat/project-tabs
