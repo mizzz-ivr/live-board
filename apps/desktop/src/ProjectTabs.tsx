@@ -13,13 +13,13 @@ export interface ProjectTabsProps {
   projects: readonly Project[];
   activeProjectId: string;
   hasUnsavedChanges: boolean;
-  canUndoProjectAdd: boolean;
-  canRedoProjectAdd: boolean;
+  canUndoProjectOperation: boolean;
+  canRedoProjectOperation: boolean;
   onTabsChange: Dispatch<SetStateAction<ProjectTabsState>>;
   onSelect(projectId: string): void;
   onCreate(): void;
-  onUndoProjectAdd(): void;
-  onRedoProjectAdd(): void;
+  onUndoProjectOperation(): void;
+  onRedoProjectOperation(): void;
 }
 
 export function ProjectTabs({
@@ -27,13 +27,13 @@ export function ProjectTabs({
   projects,
   activeProjectId,
   hasUnsavedChanges,
-  canUndoProjectAdd,
-  canRedoProjectAdd,
+  canUndoProjectOperation,
+  canRedoProjectOperation,
   onTabsChange,
   onSelect,
   onCreate,
-  onUndoProjectAdd,
-  onRedoProjectAdd,
+  onUndoProjectOperation,
+  onRedoProjectOperation,
 }: ProjectTabsProps) {
   const projectIds = useMemo(() => projects.map((project) => project.id), [projects]);
   const tabRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -114,19 +114,19 @@ export function ProjectTabs({
         </span>
         <button
           type="button"
-          aria-label="Project追加を元に戻す"
-          disabled={!canUndoProjectAdd}
-          onClick={onUndoProjectAdd}
+          aria-label="Project操作を元に戻す"
+          disabled={!canUndoProjectOperation}
+          onClick={onUndoProjectOperation}
         >
-          追加を元に戻す
+          操作を元に戻す
         </button>
         <button
           type="button"
-          aria-label="Project追加をやり直す"
-          disabled={!canRedoProjectAdd}
-          onClick={onRedoProjectAdd}
+          aria-label="Project操作をやり直す"
+          disabled={!canRedoProjectOperation}
+          onClick={onRedoProjectOperation}
         >
-          追加をやり直す
+          操作をやり直す
         </button>
         <button type="button" onClick={reopen} disabled={!canReopen}>
           閉じたタブを復元

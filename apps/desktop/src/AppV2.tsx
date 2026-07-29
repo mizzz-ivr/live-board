@@ -36,6 +36,7 @@ import {
   createProject,
   createProjectAssetLibrary,
   createSelectEditPageCommand,
+  createSelectProjectCommand,
   createTransformLayerCommand,
   dispatchCanvasCommand,
   dispatchLayerCommandWithCanvasHistory,
@@ -45,11 +46,11 @@ import {
   getCanvasHistoryBytes,
   getLayerDocument,
   getProjectHistory,
+  getWorkspaceHistoryRetainedProjectIds,
   importProjectAsset,
   redoCanvasCommand,
   redoProjectCommandWithCanvasHistory,
   redoWorkspaceCommandWithCanvasHistory,
-  selectWorkspaceProject,
   undoCanvasCommand,
   undoProjectCommandWithCanvasHistory,
   undoWorkspaceCommandWithCanvasHistory,
@@ -90,6 +91,7 @@ import { WorkspaceHome } from './WorkspaceHome';
 import { WorkspacePersistencePanel } from './WorkspacePersistencePanel';
 import { useBroadcastControls } from './useBroadcastControls';
 import { useWorkspacePersistence } from './useWorkspacePersistence';
+import { retainProjectAssetLibraries } from './workspace-session-assets';
 import './canvas-controls.css';
 import './page-controls.css';
 
@@ -189,6 +191,8 @@ export function AppV2() {
     project.id,
     persistence.workspaceSessionRevision,
   );
+  const retainedAssetProjectIds = getWorkspaceHistoryRetainedProjectIds(commandState);
+  const retainedAssetProjectIdsSignature = retainedAssetProjectIds.join('|');
   const broadcastControls = useBroadcastControls({
     commandState,
     setCommandState,
@@ -242,6 +246,12 @@ export function AppV2() {
       setProjectTabsState(currentProjectTabsState);
     }
   }, [currentProjectTabsState, projectTabsState]);
+
+  useEffect(() => {
+    setAssetLibraries((current) =>
+      retainProjectAssetLibraries(current, retainedAssetProjectIds),
+    );
+  }, [retainedAssetProjectIdsSignature]);
 
   useEffect(() => {
     const liveBoardApi = window.liveBoard;
@@ -396,10 +406,16 @@ export function AppV2() {
 
   function selectProject(projectId: string): void {
     try {
-      setCommandState((current) => ({
-        ...current,
-        workspace: selectWorkspaceProject(current.workspace, projectId),
-      }));
+      setCommandState((current) =>
+        dispatchWorkspaceCommandWithCanvasHistory(
+          current,
+          createSelectProjectCommand(
+            current.workspace.id,
+            projectId,
+            createCommandMetadata('project-select'),
+          ),
+        ),
+      );
       setSelection(null);
       setSelectionMode(null);
       setViewport(DEFAULT_CANVAS_VIEWPORT);
@@ -454,7 +470,7 @@ export function AppV2() {
     }
   }
 
-  function undoProjectAddition(): void {
+  function undoProjectOperation(): void {
     setCommandState((current) => undoWorkspaceCommandWithCanvasHistory(current));
     setSelection(null);
     setSelectionMode(null);
@@ -462,7 +478,7 @@ export function AppV2() {
     setDomainError(null);
   }
 
-  function redoProjectAddition(): void {
+  function redoProjectOperation(): void {
     setCommandState((current) => redoWorkspaceCommandWithCanvasHistory(current));
     setSelection(null);
     setSelectionMode(null);
@@ -706,13 +722,13 @@ export function AppV2() {
           projects={workspace.projects}
           activeProjectId={project.id}
           hasUnsavedChanges={persistence.hasUnsavedChanges}
-          canUndoProjectAdd={canUndoWorkspace(commandState)}
-          canRedoProjectAdd={canRedoWorkspace(commandState)}
+          canUndoProjectOperation={canUndoWorkspace(commandState)}
+          canRedoProjectOperation={canRedoWorkspace(commandState)}
           onTabsChange={setProjectTabsState}
           onSelect={selectProject}
           onCreate={createProjectTab}
-          onUndoProjectAdd={undoProjectAddition}
-          onRedoProjectAdd={redoProjectAddition}
+          onUndoProjectOperation={undoProjectOperation}
+          onRedoProjectOperation={redoProjectOperation}
         />
 
         <div className="canvas-toolbar" aria-label="描画設定">

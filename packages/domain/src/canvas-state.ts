@@ -28,6 +28,7 @@ import {
 import { type LayerCommand } from './layer-commands.js';
 import { dispatchLayerCommand } from './layer-history.js';
 import { type ProjectCommand } from './commands.js';
+import { getWorkspaceHistoryRestorableProjects } from './history.js';
 import { type WorkspaceCommand } from './workspace-commands.js';
 import {
   findPage,
@@ -143,33 +144,33 @@ export function dispatchWorkspaceCommandWithCanvasHistory(
   command: WorkspaceCommand,
 ): CanvasWorkspaceCommandState {
   const result = dispatchWorkspaceCommandWithLayerHistory(state, command);
-  return {
+  return retainWorkspaceReachableCanvasHistories({
     ...result,
     canvasHistories: state.canvasHistories,
     canvasHistoryMemoryLimitBytes: state.canvasHistoryMemoryLimitBytes,
-  };
+  });
 }
 
 export function undoWorkspaceCommandWithCanvasHistory(
   state: CanvasWorkspaceCommandState,
 ): CanvasWorkspaceCommandState {
   const result = undoWorkspaceCommandWithLayerHistory(state);
-  return {
+  return retainWorkspaceReachableCanvasHistories({
     ...result,
     canvasHistories: state.canvasHistories,
     canvasHistoryMemoryLimitBytes: state.canvasHistoryMemoryLimitBytes,
-  };
+  });
 }
 
 export function redoWorkspaceCommandWithCanvasHistory(
   state: CanvasWorkspaceCommandState,
 ): CanvasWorkspaceCommandState {
   const result = redoWorkspaceCommandWithLayerHistory(state);
-  return {
+  return retainWorkspaceReachableCanvasHistories({
     ...result,
     canvasHistories: state.canvasHistories,
     canvasHistoryMemoryLimitBytes: state.canvasHistoryMemoryLimitBytes,
-  };
+  });
 }
 
 export function dispatchProjectCommandWithCanvasHistory(
@@ -518,6 +519,37 @@ function trimHistoryByMemory(
     total -= next.shift()!.estimatedBytes;
   }
   return next;
+}
+
+function retainWorkspaceReachableCanvasHistories(
+  state: CanvasWorkspaceCommandState,
+): CanvasWorkspaceCommandState {
+  const retainedProjects = [
+    ...state.workspace.projects,
+    ...getWorkspaceHistoryRestorableProjects(state),
+  ];
+  const pageIds = new Set(
+    retainedProjects.flatMap((project) => project.pages.map((page) => page.id)),
+  );
+  const layerIds = new Set(
+    retainedProjects.flatMap((project) =>
+      project.pages.flatMap((page) =>
+        getLayerDocument(page).layers.map((layer) => layer.id),
+      ),
+    ),
+  );
+  const canvasHistories = Object.fromEntries(
+    Object.entries(state.canvasHistories)
+      .filter(([pageId]) => pageIds.has(pageId))
+      .map(([pageId, stack]) => [
+        pageId,
+        {
+          past: stack.past.filter((entry) => layerIds.has(entry.command.layerId)),
+          future: stack.future.filter((entry) => layerIds.has(entry.command.layerId)),
+        },
+      ]),
+  );
+  return { ...state, canvasHistories };
 }
 
 function retainExistingCanvasHistories(

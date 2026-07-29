@@ -4,6 +4,7 @@ import {
   createWorkspaceCommandState,
   dispatchProjectCommand,
   dispatchWorkspaceCommand,
+  getWorkspaceHistoryRestorableProjects,
   redoProjectCommand,
   redoWorkspaceCommand,
   undoProjectCommand,
@@ -61,30 +62,30 @@ export function dispatchWorkspaceCommandWithLayerHistory(
   command: WorkspaceCommand,
 ): LayerWorkspaceCommandState {
   const result = dispatchWorkspaceCommand(state, command);
-  return {
+  return retainWorkspaceReachablePageHistories({
     ...result,
     layerHistories: state.layerHistories,
-  };
+  });
 }
 
 export function undoWorkspaceCommandWithLayerHistory(
   state: LayerWorkspaceCommandState,
 ): LayerWorkspaceCommandState {
   const result = undoWorkspaceCommand(state);
-  return {
+  return retainWorkspaceReachablePageHistories({
     ...result,
     layerHistories: state.layerHistories,
-  };
+  });
 }
 
 export function redoWorkspaceCommandWithLayerHistory(
   state: LayerWorkspaceCommandState,
 ): LayerWorkspaceCommandState {
   const result = redoWorkspaceCommand(state);
-  return {
+  return retainWorkspaceReachablePageHistories({
     ...result,
     layerHistories: state.layerHistories,
-  };
+  });
 }
 
 export function dispatchProjectCommandWithLayerHistory(
@@ -249,6 +250,22 @@ export function clearLayerHistory(
   }
   const layerHistories = { ...state.layerHistories };
   delete layerHistories[pageId];
+  return { ...state, layerHistories };
+}
+
+function retainWorkspaceReachablePageHistories(
+  state: LayerWorkspaceCommandState,
+): LayerWorkspaceCommandState {
+  const retainedProjects = [
+    ...state.workspace.projects,
+    ...getWorkspaceHistoryRestorableProjects(state),
+  ];
+  const pageIds = new Set(
+    retainedProjects.flatMap((project) => project.pages.map((page) => page.id)),
+  );
+  const layerHistories = Object.fromEntries(
+    Object.entries(state.layerHistories).filter(([pageId]) => pageIds.has(pageId)),
+  );
   return { ...state, layerHistories };
 }
 

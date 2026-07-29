@@ -2,10 +2,14 @@ import {
   DomainError,
   cloneProject,
   type Project,
+  type ProjectId,
   type Workspace,
   type WorkspaceId,
 } from './model.js';
-import { appendWorkspaceProject } from './workspace-projects.js';
+import {
+  appendWorkspaceProject,
+  selectWorkspaceProject,
+} from './workspace-projects.js';
 
 export interface WorkspaceCommandMetadata {
   commandId: string;
@@ -18,7 +22,13 @@ export interface AddProjectCommand extends WorkspaceCommandMetadata {
   project: Project;
 }
 
-export type WorkspaceCommand = AddProjectCommand;
+export interface SelectProjectCommand extends WorkspaceCommandMetadata {
+  type: 'workspace.project.select';
+  workspaceId: WorkspaceId;
+  projectId: ProjectId;
+}
+
+export type WorkspaceCommand = AddProjectCommand | SelectProjectCommand;
 
 export interface WorkspaceCommandResult {
   workspace: Workspace;
@@ -38,6 +48,19 @@ export function createAddProjectCommand(
   };
 }
 
+export function createSelectProjectCommand(
+  workspaceId: WorkspaceId,
+  projectId: ProjectId,
+  metadata: WorkspaceCommandMetadata,
+): SelectProjectCommand {
+  return {
+    type: 'workspace.project.select',
+    workspaceId,
+    projectId,
+    ...metadata,
+  };
+}
+
 export function applyWorkspaceCommand(
   workspace: Workspace,
   command: WorkspaceCommand,
@@ -49,8 +72,20 @@ export function applyWorkspaceCommand(
     );
   }
 
+  if (command.type === 'workspace.project.add') {
+    return {
+      workspace: appendWorkspaceProject(workspace, command.project, command.createdAt),
+      changed: true,
+    };
+  }
+
+  const nextWorkspace = selectWorkspaceProject(
+    workspace,
+    command.projectId,
+    command.createdAt,
+  );
   return {
-    workspace: appendWorkspaceProject(workspace, command.project, command.createdAt),
-    changed: true,
+    workspace: nextWorkspace,
+    changed: nextWorkspace !== workspace,
   };
 }
