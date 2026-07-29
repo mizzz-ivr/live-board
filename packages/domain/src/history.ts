@@ -1,5 +1,6 @@
 import {
   cloneProject,
+  cloneWorkspace,
   findProject,
   replaceProject,
   type PageId,
@@ -11,6 +12,23 @@ import {
   applyProjectCommand,
   type ProjectCommand,
 } from './commands.js';
+import {
+  applyWorkspaceCommand,
+  type WorkspaceCommand,
+} from './workspace-commands.js';
+
+export interface WorkspaceHistoryEntry {
+  historyId: string;
+  command: WorkspaceCommand;
+  beforeWorkspace: Workspace;
+  afterWorkspace: Workspace;
+  estimatedBytes: number;
+}
+
+export interface WorkspaceHistoryStack {
+  past: WorkspaceHistoryEntry[];
+  future: WorkspaceHistoryEntry[];
+}
 
 export interface HistoryEntry {
   historyId: string;
@@ -26,6 +44,7 @@ export interface HistoryStack {
 }
 
 export interface CommandHistories {
+  workspace: WorkspaceHistoryStack;
   project: Record<ProjectId, HistoryStack>;
   page: Record<PageId, HistoryStack>;
 }
@@ -47,11 +66,119 @@ export function createWorkspaceCommandState(
   return {
     workspace,
     histories: {
+      workspace: { past: [], future: [] },
       project: {},
       page: {},
     },
     historyLimit,
   };
+}
+
+export function dispatchWorkspaceCommand(
+  state: WorkspaceCommandState,
+  command: WorkspaceCommand,
+): WorkspaceCommandState {
+  const beforeWorkspace = cloneWorkspace(state.workspace);
+  const result = applyWorkspaceCommand(state.workspace, command);
+  if (!result.changed) return state;
+
+  const afterWorkspace = cloneWorkspace(result.workspace);
+  const entry: WorkspaceHistoryEntry = {
+    historyId: `workspace-history:${command.commandId}`,
+    command,
+    beforeWorkspace,
+    afterWorkspace,
+    estimatedBytes: estimateWorkspaceHistoryBytes(
+      beforeWorkspace,
+      afterWorkspace,
+      command,
+    ),
+  };
+  const past = [...state.histories.workspace.past, entry].slice(-state.historyLimit);
+
+  return {
+    ...state,
+    workspace: result.workspace,
+    histories: {
+      workspace: { past, future: [] },
+      project: state.histories.project,
+      page: state.histories.page,
+    },
+  };
+}
+
+export function undoWorkspaceCommand(
+  state: WorkspaceCommandState,
+): WorkspaceCommandState {
+  const entry = state.histories.workspace.past.at(-1);
+  if (entry === undefined) return state;
+
+  const futureEntry: WorkspaceHistoryEntry = {
+    ...entry,
+    afterWorkspace: cloneWorkspace(state.workspace),
+    estimatedBytes: estimateWorkspaceHistoryBytes(
+      entry.beforeWorkspace,
+      state.workspace,
+      entry.command,
+    ),
+  };
+
+  return {
+    ...state,
+    workspace: restoreWorkspaceSnapshot(entry.beforeWorkspace),
+    histories: {
+      workspace: {
+        past: state.histories.workspace.past.slice(0, -1),
+        future: [...state.histories.workspace.future, futureEntry],
+      },
+      project: state.histories.project,
+      page: state.histories.page,
+    },
+  };
+}
+
+export function redoWorkspaceCommand(
+  state: WorkspaceCommandState,
+): WorkspaceCommandState {
+  const entry = state.histories.workspace.future.at(-1);
+  if (entry === undefined) return state;
+
+  const pastEntry: WorkspaceHistoryEntry = {
+    ...entry,
+    beforeWorkspace: cloneWorkspace(state.workspace),
+    estimatedBytes: estimateWorkspaceHistoryBytes(
+      state.workspace,
+      entry.afterWorkspace,
+      entry.command,
+    ),
+  };
+
+  return {
+    ...state,
+    workspace: restoreWorkspaceSnapshot(entry.afterWorkspace),
+    histories: {
+      workspace: {
+        past: [...state.histories.workspace.past, pastEntry].slice(-state.historyLimit),
+        future: state.histories.workspace.future.slice(0, -1),
+      },
+      project: state.histories.project,
+      page: state.histories.page,
+    },
+  };
+}
+
+export function getWorkspaceHistory(
+  state: WorkspaceCommandState,
+): WorkspaceHistoryStack {
+  return state.histories.workspace;
+}
+
+export function canUndoWorkspace(state: WorkspaceCommandState): boolean {
+  return state.histories.workspace.past.length > 0;
+}
+
+export function canRedoWorkspace(state: WorkspaceCommandState): boolean {
+  return state.histories.workspace.future.length > 0;
 }
 
 export function dispatchProjectCommand(
@@ -80,6 +207,7 @@ export function dispatchProjectCommand(
     ...state,
     workspace: result.workspace,
     histories: {
+      workspace: state.histories.workspace,
       project: {
         ...state.histories.project,
         [command.targetId]: {
@@ -113,6 +241,7 @@ export function undoProjectCommand(
     ...state,
     workspace,
     histories: {
+      workspace: state.histories.workspace,
       project: {
         ...state.histories.project,
         [projectId]: {
@@ -146,6 +275,7 @@ export function redoProjectCommand(
     ...state,
     workspace,
     histories: {
+      workspace: state.histories.workspace,
       project: {
         ...state.histories.project,
         [projectId]: {
@@ -200,6 +330,7 @@ export function clearProjectHistory(
   return {
     ...state,
     histories: {
+      workspace: state.histories.workspace,
       project: projectHistories,
       page: state.histories.page,
     },
@@ -210,6 +341,23 @@ const EMPTY_HISTORY: HistoryStack = Object.freeze({
   past: Object.freeze([]) as unknown as HistoryEntry[],
   future: Object.freeze([]) as unknown as HistoryEntry[],
 });
+
+function restoreWorkspaceSnapshot(workspace: Workspace): Workspace {
+  return {
+    ...cloneWorkspace(workspace),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function estimateWorkspaceHistoryBytes(
+  beforeWorkspace: Workspace,
+  afterWorkspace: Workspace,
+  command: WorkspaceCommand,
+): number {
+  return utf8ByteLength(
+    JSON.stringify({ beforeWorkspace, afterWorkspace, command }),
+  );
+}
 
 function estimateHistoryBytes(
   beforeProject: Project,
