@@ -190,6 +190,38 @@ export function trimWorkspaceRedoHistoryForExternalProjectBytesWithCanvasHistory
   });
 }
 
+export function getWorkspaceRedoRetainedBytesByProject(
+  state: CanvasWorkspaceCommandState,
+  externalProjectBytes: Readonly<Record<ProjectId, number>>,
+): Record<ProjectId, number> {
+  const currentProjectIds = new Set(
+    state.workspace.projects.map((project) => project.id),
+  );
+  return Object.fromEntries(
+    getWorkspaceHistoryRestorableProjects(state)
+      .filter((project) => !currentProjectIds.has(project.id))
+      .map((project) => {
+        const pageIds = project.pages.map((page) => page.id);
+        const relatedHistoryBytes =
+          historyStackBytes(state.histories.project[project.id]) +
+          pageIds.reduce(
+            (total, pageId) =>
+              total +
+              historyStackBytes(state.histories.page[pageId]) +
+              historyStackBytes(state.layerHistories[pageId]) +
+              historyStackBytes(state.canvasHistories[pageId]),
+            0,
+          );
+        const assetBytes = externalProjectBytes[project.id] ?? 0;
+        return [
+          project.id,
+          relatedHistoryBytes +
+            (Number.isSafeInteger(assetBytes) && assetBytes > 0 ? assetBytes : 0),
+        ];
+      }),
+  );
+}
+
 export function dispatchProjectCommandWithCanvasHistory(
   state: CanvasWorkspaceCommandState,
   command: ProjectCommand,
@@ -536,6 +568,21 @@ function trimHistoryByMemory(
     total -= next.shift()!.estimatedBytes;
   }
   return next;
+}
+
+function historyStackBytes(
+  stack:
+    | {
+        past: readonly { estimatedBytes: number }[];
+        future: readonly { estimatedBytes: number }[];
+      }
+    | undefined,
+): number {
+  if (stack === undefined) return 0;
+  return [...stack.past, ...stack.future].reduce(
+    (total, entry) => total + entry.estimatedBytes,
+    0,
+  );
 }
 
 function retainWorkspaceReachableCanvasHistories(

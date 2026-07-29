@@ -47,6 +47,7 @@ import {
   getLayerDocument,
   getProjectHistory,
   getWorkspaceHistoryRetainedProjectIds,
+  getWorkspaceRedoRetainedBytesByProject,
   importProjectAsset,
   redoCanvasCommand,
   redoProjectCommandWithCanvasHistory,
@@ -256,7 +257,7 @@ export function AppV2() {
   }, [currentProjectTabsState, projectTabsState]);
 
   useEffect(() => {
-    const externalProjectBytes = Object.fromEntries(
+    const assetBytesByProject = Object.fromEntries(
       Object.entries(assetLibraries).map(([projectId, library]) => [
         projectId,
         library.totalBytes,
@@ -265,7 +266,7 @@ export function AppV2() {
     setCommandState((current) =>
       trimWorkspaceRedoHistoryForExternalProjectBytesWithCanvasHistory(
         current,
-        externalProjectBytes,
+        getWorkspaceRedoRetainedBytesByProject(current, assetBytesByProject),
       ),
     );
   }, [assetLibraryBytesSignature, workspaceFutureHistorySignature]);

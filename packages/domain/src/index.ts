@@ -69,6 +69,7 @@ export {
   dispatchWorkspaceCommandWithCanvasHistory,
   getCanvasHistory,
   getCanvasHistoryBytes,
+  getWorkspaceRedoRetainedBytesByProject,
   getLayerTransform,
   getRasterDrawing,
   redoCanvasCommand,
