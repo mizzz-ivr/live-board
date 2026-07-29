@@ -5,6 +5,7 @@ import {
   createAddProjectCommand,
   createAddRasterStrokeCommand,
   createCanvasWorkspaceCommandState,
+  createClearRasterCommand,
   createEmptyWorkspace,
   createLayer,
   createPage,
@@ -99,6 +100,15 @@ describe('workspace redo memory', () => {
           })),
         },
         metadata('stroke-add'),
+      ),
+    );
+    state = dispatchCanvasCommand(
+      state,
+      createClearRasterCommand(
+        projectId,
+        pageId,
+        layerId,
+        metadata('raster-clear'),
       ),
     );
 
