@@ -1,0 +1,100 @@
+.project-tabs-shell {
+  display: flex;
+  min-width: 0;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid #374151;
+  background: #182234;
+}
+
+.project-tabs-shell .document-tabs {
+  min-width: 0;
+  overflow-x: auto;
+  border-bottom: 0;
+  padding-right: 0;
+}
+
+.project-tab-item {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  border: 1px solid #4b5563;
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  background: #111827;
+}
+
+.project-tab-item:has(.project-tab-select[aria-selected='true']) {
+  border-color: #60a5fa;
+  background: #273449;
+}
+
+.project-tabs-shell .project-tab-select,
+.project-tabs-shell .project-tab-close,
+.project-tab-actions button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 7px 10px;
+}
+
+.project-tabs-shell .project-tab-select {
+  display: flex;
+  max-width: 220px;
+  align-items: center;
+  gap: 6px;
+}
+
+.project-tab-select > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-tab-dirty {
+  color: #fbbf24;
+  font-size: 8px;
+}
+
+.project-tabs-shell .project-tab-close {
+  border-left: 1px solid #374151;
+  padding-inline: 8px;
+  color: #9ca3af;
+}
+
+.project-tabs-shell .project-tab-close:not(:disabled):hover,
+.project-tab-actions button:not(:disabled):hover {
+  background: #334155;
+  color: #fff;
+}
+
+.project-tab-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 0 0;
+}
+
+.project-tabs-save-status {
+  max-width: 210px;
+  color: #9ca3af;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.project-tab-actions button {
+  border: 1px solid #4b5563;
+  border-radius: 7px;
+  background: #273449;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+@media (max-width: 900px) {
+  .project-tabs-save-status {
+    display: none;
+  }
+}

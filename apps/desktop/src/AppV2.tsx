@@ -12,6 +12,7 @@ import {
 import {
   AssetValidationError,
   DomainError,
+  appendWorkspaceProject,
   canRedoCanvas,
   canRedoProject,
   canUndoCanvas,
@@ -31,6 +32,7 @@ import {
   createMovePageCommand,
   createPage,
   createPageRenderSnapshot,
+  createProject,
   createProjectAssetLibrary,
   createSelectEditPageCommand,
   createTransformLayerCommand,
@@ -44,6 +46,7 @@ import {
   importProjectAsset,
   redoCanvasCommand,
   redoProjectCommandWithCanvasHistory,
+  selectWorkspaceProject,
   undoCanvasCommand,
   undoProjectCommandWithCanvasHistory,
   withRichImageContent,
@@ -73,6 +76,7 @@ import { BroadcastControlPanel } from './BroadcastControlPanel';
 import { CanvasSurfaceV2 } from './CanvasSurfaceV2';
 import { LayerPanel } from './LayerPanel';
 import { PageThumbnail } from './PageThumbnail';
+import { ProjectTabs } from './ProjectTabs';
 import { RichLayerInspector } from './RichLayerInspector';
 import { WorkspaceHome } from './WorkspaceHome';
 import { WorkspacePersistencePanel } from './WorkspacePersistencePanel';
@@ -366,6 +370,60 @@ export function AppV2() {
     );
   }
 
+  function selectProject(projectId: string): void {
+    try {
+      setCommandState((current) => ({
+        ...current,
+        workspace: selectWorkspaceProject(current.workspace, projectId),
+      }));
+      setSelection(null);
+      setSelectionMode(null);
+      setViewport(DEFAULT_CANVAS_VIEWPORT);
+      setAssetError(null);
+      setDomainError(null);
+    } catch (error: unknown) {
+      setDomainError(
+        error instanceof DomainError ? error.message : 'Projectの切り替えに失敗しました',
+      );
+    }
+  }
+
+  function createProjectTab(): void {
+    const timestamp = new Date().toISOString();
+    const projectId = createEntityId('project');
+    const page = createPage({
+      id: createEntityId('page'),
+      projectId,
+      name: 'ページ 1',
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    const nextProject = createProject({
+      id: projectId,
+      workspaceId: workspace.id,
+      name: `プロジェクト ${workspace.projects.length + 1}`,
+      pages: [page],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+
+    try {
+      setCommandState((current) => ({
+        ...current,
+        workspace: appendWorkspaceProject(current.workspace, nextProject, timestamp),
+      }));
+      setSelection(null);
+      setSelectionMode(null);
+      setViewport(DEFAULT_CANVAS_VIEWPORT);
+      setAssetError(null);
+      setDomainError(null);
+    } catch (error: unknown) {
+      setDomainError(
+        error instanceof DomainError ? error.message : 'Projectの追加に失敗しました',
+      );
+    }
+  }
+
   function duplicateEditPage(): void {
     const timestamp = new Date().toISOString();
     const pageId = createEntityId('page');
@@ -597,18 +655,14 @@ export function AppV2() {
       </aside>
 
       <main className="workspace">
-        <div className="document-tabs" role="tablist" aria-label="プロジェクト">
-          {workspace.projects.map((candidate) => (
-            <button
-              key={candidate.id}
-              type="button"
-              role="tab"
-              aria-selected={candidate.id === project.id}
-            >
-              {candidate.name}
-            </button>
-          ))}
-        </div>
+        <ProjectTabs
+          workspaceId={workspace.id}
+          projects={workspace.projects}
+          activeProjectId={project.id}
+          hasUnsavedChanges={persistence.hasUnsavedChanges}
+          onSelect={selectProject}
+          onCreate={createProjectTab}
+        />
 
         <div className="canvas-toolbar" aria-label="描画設定">
           <label>
