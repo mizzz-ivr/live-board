@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { Project } from '@live-board/domain';
 import {
   closeProjectTab,
@@ -27,18 +27,18 @@ export function ProjectTabs({
   onCreate,
 }: ProjectTabsProps) {
   const projectIds = useMemo(() => projects.map((project) => project.id), [projects]);
-  const projectIdsSignature = projectIds.join('|');
   const [tabs, setTabs] = useState(() => createProjectTabsState(workspaceId, projectIds));
+  const currentTabs = synchronizeProjectTabsState(
+    tabs,
+    workspaceId,
+    projectIds,
+    activeProjectId,
+  );
   const tabRefs = useRef(new Map<string, HTMLButtonElement>());
-
-  useEffect(() => {
-    setTabs((current) =>
-      synchronizeProjectTabsState(current, workspaceId, projectIds, activeProjectId),
-    );
-  }, [workspaceId, projectIdsSignature, activeProjectId]);
-
-  const openProjects = projects.filter((project) => tabs.openProjectIds.includes(project.id));
-  const canReopen = tabs.recentlyClosedProjectIds.length > 0;
+  const openProjects = projects.filter((project) =>
+    currentTabs.openProjectIds.includes(project.id),
+  );
+  const canReopen = currentTabs.recentlyClosedProjectIds.length > 0;
 
   function selectAndFocus(projectId: string): void {
     onSelect(projectId);
@@ -46,7 +46,7 @@ export function ProjectTabs({
   }
 
   function close(projectId: string): void {
-    const result = closeProjectTab(tabs, projectId, activeProjectId);
+    const result = closeProjectTab(currentTabs, projectId, activeProjectId);
     setTabs(result.state);
     if (result.nextActiveProjectId !== activeProjectId) {
       selectAndFocus(result.nextActiveProjectId);
@@ -54,7 +54,7 @@ export function ProjectTabs({
   }
 
   function reopen(): void {
-    const result = reopenLastProjectTab(tabs, projectIds);
+    const result = reopenLastProjectTab(currentTabs, projectIds);
     setTabs(result.state);
     if (result.reopenedProjectId !== null) selectAndFocus(result.reopenedProjectId);
   }
@@ -63,7 +63,7 @@ export function ProjectTabs({
     if (!isNavigationKey(event.key)) return;
     event.preventDefault();
     selectAndFocus(
-      resolveProjectTabNavigation(tabs.openProjectIds, activeProjectId, event.key),
+      resolveProjectTabNavigation(currentTabs.openProjectIds, activeProjectId, event.key),
     );
   }
 
@@ -97,7 +97,7 @@ export function ProjectTabs({
                 type="button"
                 className="project-tab-close"
                 aria-label={`${project.name}のタブを閉じる`}
-                disabled={tabs.openProjectIds.length <= 1}
+                disabled={currentTabs.openProjectIds.length <= 1}
                 onClick={() => close(project.id)}
               >
                 ×
