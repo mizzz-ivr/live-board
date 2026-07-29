@@ -215,7 +215,7 @@ export function getWorkspaceHistoryRestorableProjects(
   state: WorkspaceCommandState,
 ): Project[] {
   return state.histories.workspace.future.flatMap((entry) =>
-    entry.command.type === 'workspace.project.add'
+    isAddProjectWorkspaceHistoryEntry(entry)
       ? [cloneProject(entry.projectSnapshot)]
       : [],
   );
@@ -399,7 +399,7 @@ function undoWorkspaceHistoryEntry(
   entry: WorkspaceHistoryEntry,
 ): { workspace: Workspace; futureEntry: WorkspaceHistoryEntry } {
   const updatedAt = new Date().toISOString();
-  if (entry.command.type === 'workspace.project.add') {
+  if (isAddProjectWorkspaceHistoryEntry(entry)) {
     const projectSnapshot = cloneProject(
       findProject(workspace, entry.command.project.id),
     );
@@ -432,7 +432,7 @@ function redoWorkspaceHistoryEntry(
 ): { workspace: Workspace; pastEntry: WorkspaceHistoryEntry } {
   const updatedAt = new Date().toISOString();
   const previousActiveProjectId = workspace.activeProjectId;
-  if (entry.command.type === 'workspace.project.add') {
+  if (isAddProjectWorkspaceHistoryEntry(entry)) {
     return {
       workspace: appendWorkspaceProject(
         workspace,
@@ -456,6 +456,12 @@ function redoWorkspaceHistoryEntry(
       previousActiveProjectId,
     }),
   };
+}
+
+function isAddProjectWorkspaceHistoryEntry(
+  entry: WorkspaceHistoryEntry,
+): entry is AddProjectWorkspaceHistoryEntry {
+  return entry.command.type === 'workspace.project.add';
 }
 
 function removeAddedProject(
