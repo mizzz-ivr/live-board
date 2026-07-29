@@ -15,17 +15,39 @@ Workspace内の複数ProjectをEditorで切り替え、作業対象を明確に�
 
 Project追加とProject選択はWorkspaceを変更するため、既存のrevision検知、自動保存、明示保存へ合流します。保存形式とIPCは変更しません。
 
-## Project追加のCommand履歴
+## Project操作のCommand履歴
 
-Project追加は`WorkspaceCommand`として実行します。
+Project追加とProject選択は`WorkspaceCommand`として実行します。
 
-- 追加後はWorkspace履歴からUndoできる
-- Undo後はRedoできる
-- Undo時点のWorkspace全体をRedo用Snapshotとして保持する
-- 追加Projectを編集した後にUndoしても、Redoで編集済み内容を復元する
-- 既存Project、Page、Layer、Canvasの履歴は別の履歴境界として維持する
+- `workspace.project.add`: Projectを追加して選択
+- `workspace.project.select`: 既存Projectを選択
+- `Project操作を元に戻す`: 直近の追加または選択をUndo
+- `Project操作をやり直す`: Undoした操作をRedo
+
+Workspace全体のSnapshotは履歴へ保存しません。Project追加履歴は次だけを保持します。
+
+- 追加対象ProjectのSnapshot
+- 操作前の`activeProjectId`
+- Command metadata
+
+追加ProjectをUndoするときは対象ProjectだけをWorkspaceから除去します。追加後に既存Projectへ加えたPage・Layer・Canvas編集は変更しません。一方、追加Project自身はUndo時点の内容をRedo用Snapshotへ更新するため、追加Projectを編集してからUndoしてもRedoで編集済み内容を復元できます。
+
+Project選択履歴は操作前後のProject IDだけを保持します。選択変更も保存対象・OBS送信先を変更するDomain操作としてUndo / Redoできます。
+
+Workspace履歴は件数上限に加えて推定バイト数上限を適用します。上限を超えた古い履歴から破棄し、長時間セッションでProject Snapshotが無制限に増えないようにします。
 
 タブを閉じる操作はRendererセッション状態の変更だけであり、Workspace Command履歴には記録しません。
+
+## 到達不能データの回収
+
+Project追加をUndoした直後はRedo可能なため、追加Projectに紐づく次のデータを保持します。
+
+- Project Asset Library
+- Project / Page履歴
+- Layer履歴
+- Canvas履歴
+
+その後に別のProject操作を実行してRedo分岐が破棄された場合、現在のWorkspaceにもRedo履歴にも存在しないProjectを到達不能と判定し、上記データをRendererメモリから回収します。
 
 ## Rendererセッションだけの状態
 
@@ -43,9 +65,9 @@ Project追加は`WorkspaceCommand`として実行します。
 ## 操作
 
 - `＋`: 初期Pageを持つProjectを追加して選択
-- `追加を元に戻す`: 直近のProject追加をUndo
-- `追加をやり直す`: UndoしたProject追加をRedo
-- タブクリック: `activeProjectId`を変更
+- `操作を元に戻す`: 直近のProject追加またはProject選択をUndo
+- `操作をやり直す`: UndoしたProject操作をRedo
+- タブクリック: `activeProjectId`をCommand経由で変更
 - `ArrowLeft` / `ArrowRight`: 開いているタブを循環
 - `Home` / `End`: 先頭・末尾タブへ移動
 - `×`: タブを閉じる。最後の1件は閉じられない
