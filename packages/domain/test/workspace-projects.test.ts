@@ -39,9 +39,10 @@ function workspace() {
 }
 
 describe('workspace projects', () => {
-  it('Projectを追加してアクティブにする', () => {
+  it('Projectを複製して追加し、アクティブにする', () => {
     const current = workspace();
-    const next = appendWorkspaceProject(current, project('project-3'), TIMESTAMP);
+    const addedProject = project('project-3');
+    const next = appendWorkspaceProject(current, addedProject, TIMESTAMP);
 
     expect(next).not.toBe(current);
     expect(next.projects.map((candidate) => candidate.id)).toEqual([
@@ -51,7 +52,8 @@ describe('workspace projects', () => {
     ]);
     expect(next.activeProjectId).toBe('project-3');
     expect(current.projects).toHaveLength(2);
-    expect(next.projects[2]).not.toBe(project('project-3'));
+    expect(next.projects[2]).not.toBe(addedProject);
+    expect(next.projects[2]?.pages[0]).not.toBe(addedProject.pages[0]);
   });
 
   it('既存Projectを選択し、他Projectを変更しない', () => {
