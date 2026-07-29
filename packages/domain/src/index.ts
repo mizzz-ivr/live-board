@@ -1,5 +1,6 @@
 export * from './model.js';
 export * from './workspace-projects.js';
+export * from './workspace-commands.js';
 export * from './commands.js';
 export * from './history.js';
 export * from './layers.js';

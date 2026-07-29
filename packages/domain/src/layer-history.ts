@@ -1,9 +1,13 @@
 import { type ProjectCommand } from './commands.js';
+import { type WorkspaceCommand } from './workspace-commands.js';
 import {
   createWorkspaceCommandState,
   dispatchProjectCommand,
+  dispatchWorkspaceCommand,
   redoProjectCommand,
+  redoWorkspaceCommand,
   undoProjectCommand,
+  undoWorkspaceCommand,
   type WorkspaceCommandState,
 } from './history.js';
 import {
@@ -49,6 +53,37 @@ export function createLayerWorkspaceCommandState(
   return {
     ...createWorkspaceCommandState(workspace, historyLimit),
     layerHistories: {},
+  };
+}
+
+export function dispatchWorkspaceCommandWithLayerHistory(
+  state: LayerWorkspaceCommandState,
+  command: WorkspaceCommand,
+): LayerWorkspaceCommandState {
+  const result = dispatchWorkspaceCommand(state, command);
+  return {
+    ...result,
+    layerHistories: state.layerHistories,
+  };
+}
+
+export function undoWorkspaceCommandWithLayerHistory(
+  state: LayerWorkspaceCommandState,
+): LayerWorkspaceCommandState {
+  const result = undoWorkspaceCommand(state);
+  return {
+    ...result,
+    layerHistories: state.layerHistories,
+  };
+}
+
+export function redoWorkspaceCommandWithLayerHistory(
+  state: LayerWorkspaceCommandState,
+): LayerWorkspaceCommandState {
+  const result = redoWorkspaceCommand(state);
+  return {
+    ...result,
+    layerHistories: state.layerHistories,
   };
 }
 

@@ -7,8 +7,11 @@ import {
 } from '@live-board/obs-protocol';
 import {
   dispatchProjectCommandWithLayerHistory,
+  dispatchWorkspaceCommandWithLayerHistory,
   redoProjectCommandWithLayerHistory,
+  redoWorkspaceCommandWithLayerHistory,
   undoProjectCommandWithLayerHistory,
+  undoWorkspaceCommandWithLayerHistory,
   createLayerWorkspaceCommandState,
   type LayerWorkspaceCommandState,
 } from './layer-history.js';
@@ -25,6 +28,7 @@ import {
 import { type LayerCommand } from './layer-commands.js';
 import { dispatchLayerCommand } from './layer-history.js';
 import { type ProjectCommand } from './commands.js';
+import { type WorkspaceCommand } from './workspace-commands.js';
 import {
   findPage,
   findProject,
@@ -131,6 +135,40 @@ export function createCanvasWorkspaceCommandState(
     ...createLayerWorkspaceCommandState(workspace, historyLimit),
     canvasHistories: {},
     canvasHistoryMemoryLimitBytes,
+  };
+}
+
+export function dispatchWorkspaceCommandWithCanvasHistory(
+  state: CanvasWorkspaceCommandState,
+  command: WorkspaceCommand,
+): CanvasWorkspaceCommandState {
+  const result = dispatchWorkspaceCommandWithLayerHistory(state, command);
+  return {
+    ...result,
+    canvasHistories: state.canvasHistories,
+    canvasHistoryMemoryLimitBytes: state.canvasHistoryMemoryLimitBytes,
+  };
+}
+
+export function undoWorkspaceCommandWithCanvasHistory(
+  state: CanvasWorkspaceCommandState,
+): CanvasWorkspaceCommandState {
+  const result = undoWorkspaceCommandWithLayerHistory(state);
+  return {
+    ...result,
+    canvasHistories: state.canvasHistories,
+    canvasHistoryMemoryLimitBytes: state.canvasHistoryMemoryLimitBytes,
+  };
+}
+
+export function redoWorkspaceCommandWithCanvasHistory(
+  state: CanvasWorkspaceCommandState,
+): CanvasWorkspaceCommandState {
+  const result = redoWorkspaceCommandWithLayerHistory(state);
+  return {
+    ...result,
+    canvasHistories: state.canvasHistories,
+    canvasHistoryMemoryLimitBytes: state.canvasHistoryMemoryLimitBytes,
   };
 }
 
