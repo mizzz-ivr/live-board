@@ -41,12 +41,21 @@ export function synchronizeProjectTabsState(
   }
 
   const openSet = new Set(openProjectIds);
+  const nextOpenProjectIds = sortByProjectOrder(openProjectIds, projectIds);
+  const nextRecentlyClosedProjectIds = state.recentlyClosedProjectIds.filter(
+    (id) => availableIds.has(id) && !openSet.has(id),
+  );
+  if (
+    arraysEqual(state.openProjectIds, nextOpenProjectIds) &&
+    arraysEqual(state.recentlyClosedProjectIds, nextRecentlyClosedProjectIds)
+  ) {
+    return state;
+  }
+
   return {
     workspaceId,
-    openProjectIds: sortByProjectOrder(openProjectIds, projectIds),
-    recentlyClosedProjectIds: state.recentlyClosedProjectIds.filter(
-      (id) => availableIds.has(id) && !openSet.has(id),
-    ),
+    openProjectIds: nextOpenProjectIds,
+    recentlyClosedProjectIds: nextRecentlyClosedProjectIds,
   };
 }
 
@@ -126,4 +135,8 @@ function sortByProjectOrder(
 ): string[] {
   const idSet = new Set(ids);
   return projectIds.filter((id) => idSet.has(id));
+}
+
+function arraysEqual(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
