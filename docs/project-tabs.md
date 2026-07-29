@@ -83,6 +83,20 @@ Project選択で`activeProjectId`が変わると、選択Projectの配信Pageを
 
 OBS同期は`publishActiveProjectBroadcastSnapshot`へ集約し、Workspaceの`activeProjectId`からSnapshotを生成します。IPC境界の統合テストでは、Project 2を選択した状態で、公開されるSnapshot descriptorにProject 2のIDと配信Page IDが含まれることを確認します。
 
+## 回帰テスト境界
+
+以下を自動テストで固定します。
+
+- Project追加Undoで既存Projectの後続編集を失わない
+- 追加Projectの編集内容をRedoで復元する
+- Project選択をUndo / Redoできる
+- Workspace履歴が推定バイト数上限を超えない
+- Redo可能なProjectのAsset・Layer・Canvas履歴を保持する
+- Redo分岐破棄後に到達不能データを回収する
+- ホーム往復ではタブ状態を維持する
+- 同一Workspace ID再読込ではタブ状態を初期化する
+- 選択Projectの配信PageをOBS IPCへ送信する
+
 ## エラー境界
 
 Domain層で次を拒否します。
