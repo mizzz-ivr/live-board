@@ -10,6 +10,7 @@ import {
   dispatchWorkspaceCommandWithLayerHistory,
   redoProjectCommandWithLayerHistory,
   redoWorkspaceCommandWithLayerHistory,
+  trimWorkspaceRedoHistoryForExternalProjectBytesWithLayerHistory,
   undoProjectCommandWithLayerHistory,
   undoWorkspaceCommandWithLayerHistory,
   createLayerWorkspaceCommandState,
@@ -166,6 +167,22 @@ export function redoWorkspaceCommandWithCanvasHistory(
   state: CanvasWorkspaceCommandState,
 ): CanvasWorkspaceCommandState {
   const result = redoWorkspaceCommandWithLayerHistory(state);
+  return retainWorkspaceReachableCanvasHistories({
+    ...result,
+    canvasHistories: state.canvasHistories,
+    canvasHistoryMemoryLimitBytes: state.canvasHistoryMemoryLimitBytes,
+  });
+}
+
+export function trimWorkspaceRedoHistoryForExternalProjectBytesWithCanvasHistory(
+  state: CanvasWorkspaceCommandState,
+  externalProjectBytes: Readonly<Record<ProjectId, number>>,
+): CanvasWorkspaceCommandState {
+  const result = trimWorkspaceRedoHistoryForExternalProjectBytesWithLayerHistory(
+    state,
+    externalProjectBytes,
+  );
+  if (result === state) return state;
   return retainWorkspaceReachableCanvasHistories({
     ...result,
     canvasHistories: state.canvasHistories,

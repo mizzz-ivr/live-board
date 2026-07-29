@@ -14,6 +14,7 @@ import {
   getWorkspaceHistoryBytes,
   redoWorkspaceCommand,
   replaceProject,
+  trimWorkspaceRedoHistoryForExternalProjectBytes,
   undoWorkspaceCommand,
 } from '../src/index.js';
 
@@ -116,6 +117,24 @@ describe('workspace command history', () => {
     expect(
       redoWorkspaceCommand(undoWorkspaceCommand(selected)).workspace.activeProjectId,
     ).toBe('project-1');
+  });
+
+  it('Redo用Projectの外部Asset容量も履歴上限へ含める', () => {
+    const added = dispatchWorkspaceCommand(
+      createWorkspaceCommandState(workspace(), 100, 2_000),
+      createAddProjectCommand('workspace-1', project('project-2'), {
+        commandId: 'command-add',
+        createdAt: TIMESTAMP,
+      }),
+    );
+    const undone = undoWorkspaceCommand(added);
+    expect(canRedoWorkspace(undone)).toBe(true);
+
+    const trimmed = trimWorkspaceRedoHistoryForExternalProjectBytes(undone, {
+      'project-2': 4_000,
+    });
+    expect(canRedoWorkspace(trimmed)).toBe(false);
+    expect(trimmed.histories.workspace.future).toEqual([]);
   });
 
   it('Workspace履歴を推定バイト数上限内へ切り詰める', () => {

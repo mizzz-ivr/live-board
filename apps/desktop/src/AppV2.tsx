@@ -51,6 +51,7 @@ import {
   redoCanvasCommand,
   redoProjectCommandWithCanvasHistory,
   redoWorkspaceCommandWithCanvasHistory,
+  trimWorkspaceRedoHistoryForExternalProjectBytesWithCanvasHistory,
   undoCanvasCommand,
   undoProjectCommandWithCanvasHistory,
   undoWorkspaceCommandWithCanvasHistory,
@@ -193,6 +194,13 @@ export function AppV2() {
   );
   const retainedAssetProjectIds = getWorkspaceHistoryRetainedProjectIds(commandState);
   const retainedAssetProjectIdsSignature = retainedAssetProjectIds.join('|');
+  const workspaceFutureHistorySignature = commandState.histories.workspace.future
+    .map((entry) => entry.historyId)
+    .join('|');
+  const assetLibraryBytesSignature = Object.entries(assetLibraries)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([projectId, library]) => `${projectId}:${library.totalBytes}`)
+    .join('|');
   const broadcastControls = useBroadcastControls({
     commandState,
     setCommandState,
@@ -246,6 +254,21 @@ export function AppV2() {
       setProjectTabsState(currentProjectTabsState);
     }
   }, [currentProjectTabsState, projectTabsState]);
+
+  useEffect(() => {
+    const externalProjectBytes = Object.fromEntries(
+      Object.entries(assetLibraries).map(([projectId, library]) => [
+        projectId,
+        library.totalBytes,
+      ]),
+    );
+    setCommandState((current) =>
+      trimWorkspaceRedoHistoryForExternalProjectBytesWithCanvasHistory(
+        current,
+        externalProjectBytes,
+      ),
+    );
+  }, [assetLibraryBytesSignature, workspaceFutureHistorySignature]);
 
   useEffect(() => {
     setAssetLibraries((current) =>

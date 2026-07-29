@@ -232,6 +232,39 @@ export function getWorkspaceHistoryRetainedProjectIds(
   ];
 }
 
+export function trimWorkspaceRedoHistoryForExternalProjectBytes(
+  state: WorkspaceCommandState,
+  externalProjectBytes: Readonly<Record<ProjectId, number>>,
+): WorkspaceCommandState {
+  const originalFuture = state.histories.workspace.future;
+  if (originalFuture.length === 0) return state;
+
+  let future = originalFuture;
+  while (
+    future.length > 0 &&
+    getWorkspaceHistoryAndExternalBytes(
+      state.histories.workspace.past,
+      future,
+      externalProjectBytes,
+    ) > state.workspaceHistoryMemoryLimitBytes
+  ) {
+    future = future.slice(1);
+  }
+  if (future.length === originalFuture.length) return state;
+
+  return retainReachableCommandHistories({
+    ...state,
+    histories: {
+      workspace: {
+        past: state.histories.workspace.past,
+        future,
+      },
+      project: state.histories.project,
+      page: state.histories.page,
+    },
+  });
+}
+
 export function dispatchProjectCommand(
   state: WorkspaceCommandState,
   command: ProjectCommand,
@@ -520,6 +553,29 @@ function retainReachableCommandHistories(
       ),
     },
   };
+}
+
+function getWorkspaceHistoryAndExternalBytes(
+  past: readonly WorkspaceHistoryEntry[],
+  future: readonly WorkspaceHistoryEntry[],
+  externalProjectBytes: Readonly<Record<ProjectId, number>>,
+): number {
+  const historyBytes = [...past, ...future].reduce(
+    (total, entry) => total + entry.estimatedBytes,
+    0,
+  );
+  const retainedProjectIds = new Set(
+    future.flatMap((entry) =>
+      isAddProjectWorkspaceHistoryEntry(entry)
+        ? [entry.projectSnapshot.id]
+        : [],
+    ),
+  );
+  const externalBytes = [...retainedProjectIds].reduce((total, projectId) => {
+    const bytes = externalProjectBytes[projectId] ?? 0;
+    return total + (Number.isSafeInteger(bytes) && bytes > 0 ? bytes : 0);
+  }, 0);
+  return historyBytes + externalBytes;
 }
 
 function withWorkspaceHistoryEstimate<T extends Omit<WorkspaceHistoryEntry, 'estimatedBytes'>>(

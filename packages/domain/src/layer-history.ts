@@ -6,6 +6,7 @@ import {
   dispatchWorkspaceCommand,
   getWorkspaceHistoryRestorableProjects,
   redoProjectCommand,
+  trimWorkspaceRedoHistoryForExternalProjectBytes,
   redoWorkspaceCommand,
   undoProjectCommand,
   undoWorkspaceCommand,
@@ -82,6 +83,21 @@ export function redoWorkspaceCommandWithLayerHistory(
   state: LayerWorkspaceCommandState,
 ): LayerWorkspaceCommandState {
   const result = redoWorkspaceCommand(state);
+  return retainWorkspaceReachablePageHistories({
+    ...result,
+    layerHistories: state.layerHistories,
+  });
+}
+
+export function trimWorkspaceRedoHistoryForExternalProjectBytesWithLayerHistory(
+  state: LayerWorkspaceCommandState,
+  externalProjectBytes: Readonly<Record<ProjectId, number>>,
+): LayerWorkspaceCommandState {
+  const result = trimWorkspaceRedoHistoryForExternalProjectBytes(
+    state,
+    externalProjectBytes,
+  );
+  if (result === state) return state;
   return retainWorkspaceReachablePageHistories({
     ...result,
     layerHistories: state.layerHistories,

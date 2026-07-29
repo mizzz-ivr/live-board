@@ -39,6 +39,7 @@ export {
   getLayerHistory,
   redoProjectCommandWithLayerHistory,
   redoWorkspaceCommandWithLayerHistory,
+  trimWorkspaceRedoHistoryForExternalProjectBytesWithLayerHistory,
   undoProjectCommandWithLayerHistory,
   undoWorkspaceCommandWithLayerHistory,
 } from './layer-history.js';
@@ -73,6 +74,7 @@ export {
   redoCanvasCommand,
   redoProjectCommandWithCanvasHistory,
   redoWorkspaceCommandWithCanvasHistory,
+  trimWorkspaceRedoHistoryForExternalProjectBytesWithCanvasHistory,
   undoCanvasCommand,
   undoProjectCommandWithCanvasHistory,
   undoWorkspaceCommandWithCanvasHistory,
