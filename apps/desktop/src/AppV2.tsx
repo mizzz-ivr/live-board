@@ -77,6 +77,10 @@ import { CanvasSurfaceV2 } from './CanvasSurfaceV2';
 import { LayerPanel } from './LayerPanel';
 import { PageThumbnail } from './PageThumbnail';
 import { ProjectTabs } from './ProjectTabs';
+import {
+  createProjectTabsState,
+  synchronizeProjectTabsState,
+} from './project-tabs-model';
 import { RichLayerInspector } from './RichLayerInspector';
 import { WorkspaceHome } from './WorkspaceHome';
 import { WorkspacePersistencePanel } from './WorkspacePersistencePanel';
@@ -145,6 +149,12 @@ export function AppV2() {
   const [hasEditorSession, setHasEditorSession] = useState(
     initialApplicationSurface() === 'editor',
   );
+  const [projectTabsState, setProjectTabsState] = useState(() =>
+    createProjectTabsState(
+      initialCommandState.workspace.id,
+      initialCommandState.workspace.projects.map((project) => project.id),
+    ),
+  );
   const [toolId, setToolId] = useState<CanvasToolId>('pen');
   const [selectionMode, setSelectionMode] = useState<SelectionMode | null>(null);
   const [selection, setSelection] = useState<CanvasSelection | null>(null);
@@ -167,6 +177,13 @@ export function AppV2() {
   const project =
     workspace.projects.find((candidate) => candidate.id === workspace.activeProjectId) ??
     workspace.projects[0]!;
+  const projectIds = workspace.projects.map((candidate) => candidate.id);
+  const currentProjectTabsState = synchronizeProjectTabsState(
+    projectTabsState,
+    workspace.id,
+    projectIds,
+    project.id,
+  );
   const broadcastControls = useBroadcastControls({
     commandState,
     setCommandState,
@@ -214,6 +231,12 @@ export function AppV2() {
     setSelection(null);
     setSelectionMode(null);
   }, [editPage.id]);
+
+  useEffect(() => {
+    if (currentProjectTabsState !== projectTabsState) {
+      setProjectTabsState(currentProjectTabsState);
+    }
+  }, [currentProjectTabsState, projectTabsState]);
 
   useEffect(() => {
     const liveBoardApi = window.liveBoard;
@@ -656,10 +679,11 @@ export function AppV2() {
 
       <main className="workspace">
         <ProjectTabs
-          workspaceId={workspace.id}
+          tabs={currentProjectTabsState}
           projects={workspace.projects}
           activeProjectId={project.id}
           hasUnsavedChanges={persistence.hasUnsavedChanges}
+          onTabsChange={setProjectTabsState}
           onSelect={selectProject}
           onCreate={createProjectTab}
         />
