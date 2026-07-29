@@ -34,7 +34,7 @@ Workspace全体のSnapshotは履歴へ保存しません。Project追加履歴�
 
 Project選択履歴は操作前後のProject IDだけを保持します。選択変更も保存対象・OBS送信先を変更するDomain操作としてUndo / Redoできます。
 
-Workspace履歴は件数上限に加えて推定バイト数上限を適用します。上限を超えた古い履歴から破棄し、長時間セッションでProject Snapshotが無制限に増えないようにします。
+Workspace履歴は件数上限に加えて推定バイト数上限を適用します。履歴entryの推定サイズだけでなく、Redo可能なProjectに紐づいて保持するAsset Libraryの`totalBytes`も合算します。上限超過時は古いRedo entryから破棄し、対応するProjectが復元不能になった後にAsset Libraryと関連履歴を回収します。
 
 タブを閉じる操作はRendererセッション状態の変更だけであり、Workspace Command履歴には記録しません。
 
@@ -47,7 +47,7 @@ Project追加をUndoした直後はRedo可能なため、追加Projectに紐づ�
 - Layer履歴
 - Canvas履歴
 
-その後に別のProject操作を実行してRedo分岐が破棄された場合、現在のWorkspaceにもRedo履歴にも存在しないProjectを到達不能と判定し、上記データをRendererメモリから回収します。
+その後に別のProject操作を実行してRedo分岐が破棄された場合、またはAsset容量込みのWorkspace履歴上限によってRedo entryが削除された場合、現在のWorkspaceにもRedo履歴にも存在しないProjectを到達不能と判定し、上記データをRendererメモリから回収します。
 
 ## Rendererセッションだけの状態
 
@@ -91,6 +91,8 @@ OBS同期は`publishActiveProjectBroadcastSnapshot`へ集約し、Workspaceの`a
 - 追加Projectの編集内容をRedoで復元する
 - Project選択をUndo / Redoできる
 - Workspace履歴が推定バイト数上限を超えない
+- Redo可能なProjectのAsset容量をWorkspace履歴上限へ含める
+- 容量超過でRedo entryが削除されたProjectを保持対象から外す
 - Redo可能なProjectのAsset・Layer・Canvas履歴を保持する
 - Redo分岐破棄後に到達不能データを回収する
 - ホーム往復ではタブ状態を維持する
