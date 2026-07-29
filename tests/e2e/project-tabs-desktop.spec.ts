@@ -19,7 +19,7 @@ test('Projectタブを追加・Project操作Undo・切り替え・閉じる・�
   await page.getByRole('button', { name: 'Project操作を元に戻す' }).click();
   await expect(tablist.getByRole('tab')).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Project操作をやり直す' })).toBeEnabled();
-  await page.getByRole('button', { name: 'Project追加をやり直す' }).click();
+  await page.getByRole('button', { name: 'Project操作をやり直す' }).click();
   await expect(tablist.getByRole('tab')).toHaveCount(2);
   await expect(secondTab).toHaveAttribute('aria-selected', 'true');
 
