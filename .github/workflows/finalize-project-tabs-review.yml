@@ -1,0 +1,32 @@
+name: Finalize Project Tabs Review
+
+on:
+  push:
+    branches:
+      - feat/project-tabs
+    paths:
+      - .github/workflows/finalize-project-tabs-review.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: feat/project-tabs
+          fetch-depth: 0
+
+      - name: Finalize review fixes
+        run: python .github/scripts/finalize-project-tabs-review.py
+
+      - name: Commit final review fixes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Projectタブのセッション・Undo境界を修正"
+          git push origin HEAD:feat/project-tabs
