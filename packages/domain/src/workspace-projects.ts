@@ -55,7 +55,6 @@ export function selectWorkspaceProject(
   return nextWorkspace;
 }
 
-
 export function renameWorkspaceProject(
   workspace: Workspace,
   projectId: ProjectId,
