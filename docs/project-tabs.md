@@ -13,16 +13,16 @@ Workspace内の複数ProjectをEditorで切り替え、作業対象を明確に�
 - 各ProjectのPage・Layer・配信設定
 - Project単位のAsset Library
 
-Project追加とProject選択はWorkspaceを変更するため、既存のrevision検知、自動保存、明示保存へ合流します。保存形式とIPCは変更しません。
+Project追加・選択・名前変更はWorkspaceを変更するため、既存のrevision検知、自動保存、明示保存へ合流します。保存形式とIPCは変更しません。
 
 ## Project操作のCommand履歴
 
-Project追加とProject選択は`WorkspaceCommand`として実行します。
+Project追加・選択・名前変更は`WorkspaceCommand`として実行します。
 
 - `workspace.project.add`: Projectを追加して選択
 - `workspace.project.select`: 既存Projectを選択
 - `workspace.project.rename`: Project名を変更
-- `Project操作を元に戻す`: 直近の追加または選択をUndo
+- `Project操作を元に戻す`: 直近の追加・選択・名前変更をUndo
 - `Project操作をやり直す`: Undoした操作をRedo
 
 Workspace全体のSnapshotは履歴へ保存しません。Project追加履歴は次だけを保持します。
@@ -90,7 +90,7 @@ Project追加をUndoした直後はRedo可能なため、追加Projectに紐づ�
 
 - `＋`: 初期Pageを持つProjectを追加して選択
 - `名前`: 1〜120文字のProject名へ変更
-- `操作を元に戻す`: 直近のProject追加またはProject選択をUndo
+- `操作を元に戻す`: 直近のProject追加・選択・名前変更をUndo
 - `操作をやり直す`: UndoしたProject操作をRedo
 - タブクリック: `activeProjectId`をCommand経由で変更
 - `ArrowLeft` / `ArrowRight`: 現在の表示順で開いているタブを循環
@@ -138,7 +138,8 @@ OBS同期は`publishActiveProjectBroadcastSnapshot`へ集約し、Workspaceの`a
 
 Domain層で次を拒否します。
 
-- 存在しないProjectの選択
+- 存在しないProjectの選択・名前変更
+- 空文字、空白のみ、121文字以上のProject名
 - 重複Project IDの追加
 - 別Workspaceに属するProjectの追加
 - 対象Workspace IDが一致しないWorkspace Command
