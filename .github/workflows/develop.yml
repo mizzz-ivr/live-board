@@ -68,6 +68,21 @@ jobs:
           path.write_text(text)
           PY
           python /tmp/apply-project-rename.py
+          python <<'PY'
+          from pathlib import Path
+
+          path = Path('tests/e2e/project-tabs-desktop.spec.ts')
+          text = path.read_text()
+          text = text.replace(
+              "await firstTab.dragTo(secondTab, { targetPosition: { x: 2, y: 10 } });",
+              "await firstTab.dragTo(secondTab.locator('..'), { targetPosition: { x: 2, y: 10 } });",
+          )
+          text = text.replace(
+              "await secondTab.dragTo(thirdTab, { targetPosition: { x: 2, y: 10 } });",
+              "await secondTab.dragTo(thirdTab.locator('..'), { targetPosition: { x: 2, y: 10 } });",
+          )
+          path.write_text(text)
+          PY
           git show origin/main:.github/workflows/develop.yml > .github/workflows/develop.yml
 
       - name: Setup pnpm
