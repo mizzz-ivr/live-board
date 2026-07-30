@@ -36,6 +36,7 @@ export interface WorkspacePersistenceController {
   recentDocuments: PublicDocumentRecord[];
   recoveryCandidates: PublicRecoveryCandidate[];
   revision: number;
+  workspaceSessionRevision: number;
   hasUnsavedChanges: boolean;
   createNew(): void;
   save(): Promise<void>;
@@ -70,6 +71,7 @@ export function useWorkspacePersistence(input: {
     PublicRecoveryCandidate[]
   >([]);
   const [revision, setRevision] = useState(0);
+  const [workspaceSessionRevision, setWorkspaceSessionRevision] = useState(0);
   const [lastExplicitSaveRevision, setLastExplicitSaveRevision] = useState<
     number | null
   >(null);
@@ -197,6 +199,7 @@ export function useWorkspacePersistence(input: {
       revisionRef.current = 0;
       setRevision(0);
       setLastExplicitSaveRevision(nextDocument === null ? null : 0);
+      setWorkspaceSessionRevision((current) => current + 1);
       input.setCommandState(createCanvasWorkspaceCommandState(bundle.workspace));
       input.setAssetLibraries(bundle.assetLibraries);
       setDocument(nextDocument);
@@ -500,6 +503,7 @@ export function useWorkspacePersistence(input: {
     recentDocuments,
     recoveryCandidates,
     revision,
+    workspaceSessionRevision,
     hasUnsavedChanges,
     createNew,
     save: () => saveWithMode(false),

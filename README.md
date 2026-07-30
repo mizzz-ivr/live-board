@@ -15,7 +15,7 @@ Live Board は、配信者向けのローカル完結型リアルタイムペイ
 
 ## 現在の状態
 
-M3「保存・復旧・性能・配信操作性」に加え、画像Asset分離配信、Renderer–Main／OBS OverlayのLayer差分転送、Windows向け未署名RCパッケージ生成、起動時のWorkspaceホームまで実装しています。
+M3「保存・復旧・性能・配信操作性」に加え、画像Asset分離配信、Renderer–Main／OBS OverlayのLayer差分転送、Windows向け未署名RCパッケージ生成、起動時のWorkspaceホーム、Projectタブ操作まで実装しています。
 
 実装済み:
 
@@ -74,6 +74,7 @@ M3「保存・復旧・性能・配信操作性」に加え、画像Asset分離�
 - schemaVersion 0→1 migrationと未知schema拒否
 - Zip Slip・symlink・暗号化・CRC／SHA改ざん拒否
 - 起動直後のWorkspaceホーム、新規作成、最近使用、お気に入り、クラッシュ復元
+- Project追加、タブ切り替え、タブを閉じる、直近タブの復元、Workspace単位の未保存表示
 - 最近使用、お気に入り、複製、インポート
 - Alt＋左右・番号指定による配信ページ切り替え
 - 配信ページ固定と入力欄フォーカス中のショートカット抑止
@@ -126,6 +127,19 @@ RendererからNode.js APIへ直接アクセスできない構成です。
 - Browser PreviewではファイルI/Oと復元操作を無効化
 
 ホーム表示中は配信ショートカットとRendererからMainへのOBS同期を停止し、Editorへ戻った時点で最新状態を再同期します。詳細は[ワークスペースホーム設計](docs/workspace-home.md)を参照してください。
+
+### Projectタブ
+
+Workspace内のProjectはEditor上部のタブで切り替えます。
+
+- 初期Page付きProjectを追加
+- クリック、左右キー、Home / Endで切り替え
+- タブを閉じてもProject本体・Page・Layer・Asset・履歴は削除しない
+- 直近に閉じたタブを同一セッション内で復元
+- 保存単位に合わせてWorkspace全体の未保存状態を表示
+- Project切り替え後は選択Projectの配信PageをOBSへ再同期
+
+詳細は[Projectタブ設計](docs/project-tabs.md)を参照してください。
 
 ### Windows配布パッケージ
 

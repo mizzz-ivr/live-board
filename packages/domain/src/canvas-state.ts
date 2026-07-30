@@ -7,8 +7,12 @@ import {
 } from '@live-board/obs-protocol';
 import {
   dispatchProjectCommandWithLayerHistory,
+  dispatchWorkspaceCommandWithLayerHistory,
   redoProjectCommandWithLayerHistory,
+  redoWorkspaceCommandWithLayerHistory,
+  trimWorkspaceRedoHistoryForExternalProjectBytesWithLayerHistory,
   undoProjectCommandWithLayerHistory,
+  undoWorkspaceCommandWithLayerHistory,
   createLayerWorkspaceCommandState,
   type LayerWorkspaceCommandState,
 } from './layer-history.js';
@@ -25,6 +29,8 @@ import {
 import { type LayerCommand } from './layer-commands.js';
 import { dispatchLayerCommand } from './layer-history.js';
 import { type ProjectCommand } from './commands.js';
+import { getWorkspaceHistoryRestorableProjects } from './history.js';
+import { type WorkspaceCommand } from './workspace-commands.js';
 import {
   findPage,
   findProject,
@@ -132,6 +138,88 @@ export function createCanvasWorkspaceCommandState(
     canvasHistories: {},
     canvasHistoryMemoryLimitBytes,
   };
+}
+
+export function dispatchWorkspaceCommandWithCanvasHistory(
+  state: CanvasWorkspaceCommandState,
+  command: WorkspaceCommand,
+): CanvasWorkspaceCommandState {
+  const result = dispatchWorkspaceCommandWithLayerHistory(state, command);
+  return retainWorkspaceReachableCanvasHistories({
+    ...result,
+    canvasHistories: state.canvasHistories,
+    canvasHistoryMemoryLimitBytes: state.canvasHistoryMemoryLimitBytes,
+  });
+}
+
+export function undoWorkspaceCommandWithCanvasHistory(
+  state: CanvasWorkspaceCommandState,
+): CanvasWorkspaceCommandState {
+  const result = undoWorkspaceCommandWithLayerHistory(state);
+  return retainWorkspaceReachableCanvasHistories({
+    ...result,
+    canvasHistories: state.canvasHistories,
+    canvasHistoryMemoryLimitBytes: state.canvasHistoryMemoryLimitBytes,
+  });
+}
+
+export function redoWorkspaceCommandWithCanvasHistory(
+  state: CanvasWorkspaceCommandState,
+): CanvasWorkspaceCommandState {
+  const result = redoWorkspaceCommandWithLayerHistory(state);
+  return retainWorkspaceReachableCanvasHistories({
+    ...result,
+    canvasHistories: state.canvasHistories,
+    canvasHistoryMemoryLimitBytes: state.canvasHistoryMemoryLimitBytes,
+  });
+}
+
+export function trimWorkspaceRedoHistoryForExternalProjectBytesWithCanvasHistory(
+  state: CanvasWorkspaceCommandState,
+  externalProjectBytes: Readonly<Record<ProjectId, number>>,
+): CanvasWorkspaceCommandState {
+  const result = trimWorkspaceRedoHistoryForExternalProjectBytesWithLayerHistory(
+    state,
+    externalProjectBytes,
+  );
+  if (result === state) return state;
+  return retainWorkspaceReachableCanvasHistories({
+    ...result,
+    canvasHistories: state.canvasHistories,
+    canvasHistoryMemoryLimitBytes: state.canvasHistoryMemoryLimitBytes,
+  });
+}
+
+export function getWorkspaceRedoRetainedBytesByProject(
+  state: CanvasWorkspaceCommandState,
+  externalProjectBytes: Readonly<Record<ProjectId, number>>,
+): Record<ProjectId, number> {
+  const currentProjectIds = new Set(
+    state.workspace.projects.map((project) => project.id),
+  );
+  return Object.fromEntries(
+    getWorkspaceHistoryRestorableProjects(state)
+      .filter((project) => !currentProjectIds.has(project.id))
+      .map((project) => {
+        const pageIds = project.pages.map((page) => page.id);
+        const relatedHistoryBytes =
+          historyStackBytes(state.histories.project[project.id]) +
+          pageIds.reduce(
+            (total, pageId) =>
+              total +
+              historyStackBytes(state.histories.page[pageId]) +
+              historyStackBytes(state.layerHistories[pageId]) +
+              historyStackBytes(state.canvasHistories[pageId]),
+            0,
+          );
+        const assetBytes = externalProjectBytes[project.id] ?? 0;
+        return [
+          project.id,
+          relatedHistoryBytes +
+            (Number.isSafeInteger(assetBytes) && assetBytes > 0 ? assetBytes : 0),
+        ];
+      }),
+  );
 }
 
 export function dispatchProjectCommandWithCanvasHistory(
@@ -480,6 +568,52 @@ function trimHistoryByMemory(
     total -= next.shift()!.estimatedBytes;
   }
   return next;
+}
+
+function historyStackBytes(
+  stack:
+    | {
+        past: readonly { estimatedBytes: number }[];
+        future: readonly { estimatedBytes: number }[];
+      }
+    | undefined,
+): number {
+  if (stack === undefined) return 0;
+  return [...stack.past, ...stack.future].reduce(
+    (total, entry) => total + entry.estimatedBytes,
+    0,
+  );
+}
+
+function retainWorkspaceReachableCanvasHistories(
+  state: CanvasWorkspaceCommandState,
+): CanvasWorkspaceCommandState {
+  const retainedProjects = [
+    ...state.workspace.projects,
+    ...getWorkspaceHistoryRestorableProjects(state),
+  ];
+  const pageIds = new Set(
+    retainedProjects.flatMap((project) => project.pages.map((page) => page.id)),
+  );
+  const layerIds = new Set(
+    retainedProjects.flatMap((project) =>
+      project.pages.flatMap((page) =>
+        getLayerDocument(page).layers.map((layer) => layer.id),
+      ),
+    ),
+  );
+  const canvasHistories = Object.fromEntries(
+    Object.entries(state.canvasHistories)
+      .filter(([pageId]) => pageIds.has(pageId))
+      .map(([pageId, stack]) => [
+        pageId,
+        {
+          past: stack.past.filter((entry) => layerIds.has(entry.command.layerId)),
+          future: stack.future.filter((entry) => layerIds.has(entry.command.layerId)),
+        },
+      ]),
+  );
+  return { ...state, canvasHistories };
 }
 
 function retainExistingCanvasHistories(

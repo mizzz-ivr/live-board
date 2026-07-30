@@ -1,9 +1,15 @@
 import { type ProjectCommand } from './commands.js';
+import { type WorkspaceCommand } from './workspace-commands.js';
 import {
   createWorkspaceCommandState,
   dispatchProjectCommand,
+  dispatchWorkspaceCommand,
+  getWorkspaceHistoryRestorableProjects,
   redoProjectCommand,
+  trimWorkspaceRedoHistoryForExternalProjectBytes,
+  redoWorkspaceCommand,
   undoProjectCommand,
+  undoWorkspaceCommand,
   type WorkspaceCommandState,
 } from './history.js';
 import {
@@ -50,6 +56,52 @@ export function createLayerWorkspaceCommandState(
     ...createWorkspaceCommandState(workspace, historyLimit),
     layerHistories: {},
   };
+}
+
+export function dispatchWorkspaceCommandWithLayerHistory(
+  state: LayerWorkspaceCommandState,
+  command: WorkspaceCommand,
+): LayerWorkspaceCommandState {
+  const result = dispatchWorkspaceCommand(state, command);
+  return retainWorkspaceReachablePageHistories({
+    ...result,
+    layerHistories: state.layerHistories,
+  });
+}
+
+export function undoWorkspaceCommandWithLayerHistory(
+  state: LayerWorkspaceCommandState,
+): LayerWorkspaceCommandState {
+  const result = undoWorkspaceCommand(state);
+  return retainWorkspaceReachablePageHistories({
+    ...result,
+    layerHistories: state.layerHistories,
+  });
+}
+
+export function redoWorkspaceCommandWithLayerHistory(
+  state: LayerWorkspaceCommandState,
+): LayerWorkspaceCommandState {
+  const result = redoWorkspaceCommand(state);
+  return retainWorkspaceReachablePageHistories({
+    ...result,
+    layerHistories: state.layerHistories,
+  });
+}
+
+export function trimWorkspaceRedoHistoryForExternalProjectBytesWithLayerHistory(
+  state: LayerWorkspaceCommandState,
+  externalProjectBytes: Readonly<Record<ProjectId, number>>,
+): LayerWorkspaceCommandState {
+  const result = trimWorkspaceRedoHistoryForExternalProjectBytes(
+    state,
+    externalProjectBytes,
+  );
+  if (result === state) return state;
+  return retainWorkspaceReachablePageHistories({
+    ...result,
+    layerHistories: state.layerHistories,
+  });
 }
 
 export function dispatchProjectCommandWithLayerHistory(
@@ -214,6 +266,22 @@ export function clearLayerHistory(
   }
   const layerHistories = { ...state.layerHistories };
   delete layerHistories[pageId];
+  return { ...state, layerHistories };
+}
+
+function retainWorkspaceReachablePageHistories(
+  state: LayerWorkspaceCommandState,
+): LayerWorkspaceCommandState {
+  const retainedProjects = [
+    ...state.workspace.projects,
+    ...getWorkspaceHistoryRestorableProjects(state),
+  ];
+  const pageIds = new Set(
+    retainedProjects.flatMap((project) => project.pages.map((page) => page.id)),
+  );
+  const layerHistories = Object.fromEntries(
+    Object.entries(state.layerHistories).filter(([pageId]) => pageIds.has(pageId)),
+  );
   return { ...state, layerHistories };
 }
 

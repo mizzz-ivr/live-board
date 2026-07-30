@@ -14,14 +14,16 @@ import {
   DomainError,
   canRedoCanvas,
   canRedoProject,
+  canRedoWorkspace,
   canUndoCanvas,
   canUndoProject,
+  canUndoWorkspace,
   cloneLayer,
   createAddLayerCommand,
   createAddPageCommand,
+  createAddProjectCommand,
   createAddRasterFillCommand,
   createAddRasterStrokeCommand,
-  createBroadcastSnapshot,
   createCanvasWorkspaceCommandState,
   createClearRasterCommand,
   createDeletePageCommand,
@@ -31,21 +33,29 @@ import {
   createMovePageCommand,
   createPage,
   createPageRenderSnapshot,
+  createProject,
   createProjectAssetLibrary,
   createSelectEditPageCommand,
+  createSelectProjectCommand,
   createTransformLayerCommand,
   dispatchCanvasCommand,
   dispatchLayerCommandWithCanvasHistory,
   dispatchProjectCommandWithCanvasHistory,
+  dispatchWorkspaceCommandWithCanvasHistory,
   getCanvasHistory,
   getCanvasHistoryBytes,
   getLayerDocument,
   getProjectHistory,
+  getWorkspaceHistoryRetainedProjectIds,
+  getWorkspaceRedoRetainedBytesByProject,
   importProjectAsset,
   redoCanvasCommand,
   redoProjectCommandWithCanvasHistory,
+  redoWorkspaceCommandWithCanvasHistory,
+  trimWorkspaceRedoHistoryForExternalProjectBytesWithCanvasHistory,
   undoCanvasCommand,
   undoProjectCommandWithCanvasHistory,
+  undoWorkspaceCommandWithCanvasHistory,
   withRichImageContent,
   type AssetImportInput,
   type CanvasWorkspaceCommandState,
@@ -68,16 +78,22 @@ import {
   type SetStateAction,
 } from 'react';
 import { AssetPanel } from './AssetPanel';
-import { publishBroadcastSnapshotWithAssets } from './broadcast-ipc';
+import { publishActiveProjectBroadcastSnapshot } from './project-broadcast-sync';
 import { BroadcastControlPanel } from './BroadcastControlPanel';
 import { CanvasSurfaceV2 } from './CanvasSurfaceV2';
 import { LayerPanel } from './LayerPanel';
 import { PageThumbnail } from './PageThumbnail';
+import { ProjectTabs } from './ProjectTabs';
+import {
+  createProjectTabsState,
+  synchronizeProjectTabsState,
+} from './project-tabs-model';
 import { RichLayerInspector } from './RichLayerInspector';
 import { WorkspaceHome } from './WorkspaceHome';
 import { WorkspacePersistencePanel } from './WorkspacePersistencePanel';
 import { useBroadcastControls } from './useBroadcastControls';
 import { useWorkspacePersistence } from './useWorkspacePersistence';
+import { retainProjectAssetLibraries } from './workspace-session-assets';
 import './canvas-controls.css';
 import './page-controls.css';
 
@@ -141,6 +157,12 @@ export function AppV2() {
   const [hasEditorSession, setHasEditorSession] = useState(
     initialApplicationSurface() === 'editor',
   );
+  const [projectTabsState, setProjectTabsState] = useState(() =>
+    createProjectTabsState(
+      initialCommandState.workspace.id,
+      initialCommandState.workspace.projects.map((project) => project.id),
+    ),
+  );
   const [toolId, setToolId] = useState<CanvasToolId>('pen');
   const [selectionMode, setSelectionMode] = useState<SelectionMode | null>(null);
   const [selection, setSelection] = useState<CanvasSelection | null>(null);
@@ -163,6 +185,23 @@ export function AppV2() {
   const project =
     workspace.projects.find((candidate) => candidate.id === workspace.activeProjectId) ??
     workspace.projects[0]!;
+  const projectIds = workspace.projects.map((candidate) => candidate.id);
+  const currentProjectTabsState = synchronizeProjectTabsState(
+    projectTabsState,
+    workspace.id,
+    projectIds,
+    project.id,
+    persistence.workspaceSessionRevision,
+  );
+  const retainedAssetProjectIds = getWorkspaceHistoryRetainedProjectIds(commandState);
+  const retainedAssetProjectIdsSignature = retainedAssetProjectIds.join('|');
+  const workspaceFutureHistorySignature = commandState.histories.workspace.future
+    .map((entry) => entry.historyId)
+    .join('|');
+  const assetLibraryBytesSignature = Object.entries(assetLibraries)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([projectId, library]) => `${projectId}:${library.totalBytes}`)
+    .join('|');
   const broadcastControls = useBroadcastControls({
     commandState,
     setCommandState,
@@ -212,6 +251,33 @@ export function AppV2() {
   }, [editPage.id]);
 
   useEffect(() => {
+    if (currentProjectTabsState !== projectTabsState) {
+      setProjectTabsState(currentProjectTabsState);
+    }
+  }, [currentProjectTabsState, projectTabsState]);
+
+  useEffect(() => {
+    const assetBytesByProject = Object.fromEntries(
+      Object.entries(assetLibraries).map(([projectId, library]) => [
+        projectId,
+        library.totalBytes,
+      ]),
+    );
+    setCommandState((current) =>
+      trimWorkspaceRedoHistoryForExternalProjectBytesWithCanvasHistory(
+        current,
+        getWorkspaceRedoRetainedBytesByProject(current, assetBytesByProject),
+      ),
+    );
+  }, [assetLibraryBytesSignature, workspaceFutureHistorySignature]);
+
+  useEffect(() => {
+    setAssetLibraries((current) =>
+      retainProjectAssetLibraries(current, retainedAssetProjectIds),
+    );
+  }, [retainedAssetProjectIdsSignature]);
+
+  useEffect(() => {
     const liveBoardApi = window.liveBoard;
     if (liveBoardApi === undefined) return;
     let active = true;
@@ -244,19 +310,15 @@ export function AppV2() {
     const revision = nextBroadcastRevisionRef.current;
     nextBroadcastRevisionRef.current += 1;
     const requestId = globalThis.crypto.randomUUID();
-    const snapshot = createBroadcastSnapshot(
-      workspace,
-      project.id,
-      revision,
-      new Date().toISOString(),
-      assetLibrary,
-    );
-    void publishBroadcastSnapshotWithAssets(
-      liveBoardApi,
+    void publishActiveProjectBroadcastSnapshot({
+      api: liveBoardApi,
       requestId,
-      snapshot,
-      registeredBroadcastAssetHashesRef.current,
-    )
+      workspace,
+      revision,
+      generatedAt: new Date().toISOString(),
+      assetLibrary,
+      registeredSha256: registeredBroadcastAssetHashesRef.current,
+    })
       .then((response) => {
         if (active && response.requestId === requestId) {
           setBroadcastRevision(response.acceptedRevision);
@@ -364,6 +426,88 @@ export function AppV2() {
         createCommandMetadata('page-add'),
       ),
     );
+  }
+
+  function selectProject(projectId: string): void {
+    try {
+      setCommandState((current) =>
+        dispatchWorkspaceCommandWithCanvasHistory(
+          current,
+          createSelectProjectCommand(
+            current.workspace.id,
+            projectId,
+            createCommandMetadata('project-select'),
+          ),
+        ),
+      );
+      setSelection(null);
+      setSelectionMode(null);
+      setViewport(DEFAULT_CANVAS_VIEWPORT);
+      setAssetError(null);
+      setDomainError(null);
+    } catch (error: unknown) {
+      setDomainError(
+        error instanceof DomainError ? error.message : 'Projectの切り替えに失敗しました',
+      );
+    }
+  }
+
+  function createProjectTab(): void {
+    const timestamp = new Date().toISOString();
+    const projectId = createEntityId('project');
+    const page = createPage({
+      id: createEntityId('page'),
+      projectId,
+      name: 'ページ 1',
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    const nextProject = createProject({
+      id: projectId,
+      workspaceId: workspace.id,
+      name: `プロジェクト ${workspace.projects.length + 1}`,
+      pages: [page],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+
+    try {
+      setCommandState((current) =>
+        dispatchWorkspaceCommandWithCanvasHistory(
+          current,
+          createAddProjectCommand(
+            current.workspace.id,
+            nextProject,
+            createCommandMetadata('project-add'),
+          ),
+        ),
+      );
+      setSelection(null);
+      setSelectionMode(null);
+      setViewport(DEFAULT_CANVAS_VIEWPORT);
+      setAssetError(null);
+      setDomainError(null);
+    } catch (error: unknown) {
+      setDomainError(
+        error instanceof DomainError ? error.message : 'Projectの追加に失敗しました',
+      );
+    }
+  }
+
+  function undoProjectOperation(): void {
+    setCommandState((current) => undoWorkspaceCommandWithCanvasHistory(current));
+    setSelection(null);
+    setSelectionMode(null);
+    setViewport(DEFAULT_CANVAS_VIEWPORT);
+    setDomainError(null);
+  }
+
+  function redoProjectOperation(): void {
+    setCommandState((current) => redoWorkspaceCommandWithCanvasHistory(current));
+    setSelection(null);
+    setSelectionMode(null);
+    setViewport(DEFAULT_CANVAS_VIEWPORT);
+    setDomainError(null);
   }
 
   function duplicateEditPage(): void {
@@ -597,18 +741,19 @@ export function AppV2() {
       </aside>
 
       <main className="workspace">
-        <div className="document-tabs" role="tablist" aria-label="プロジェクト">
-          {workspace.projects.map((candidate) => (
-            <button
-              key={candidate.id}
-              type="button"
-              role="tab"
-              aria-selected={candidate.id === project.id}
-            >
-              {candidate.name}
-            </button>
-          ))}
-        </div>
+        <ProjectTabs
+          tabs={currentProjectTabsState}
+          projects={workspace.projects}
+          activeProjectId={project.id}
+          hasUnsavedChanges={persistence.hasUnsavedChanges}
+          canUndoProjectOperation={canUndoWorkspace(commandState)}
+          canRedoProjectOperation={canRedoWorkspace(commandState)}
+          onTabsChange={setProjectTabsState}
+          onSelect={selectProject}
+          onCreate={createProjectTab}
+          onUndoProjectOperation={undoProjectOperation}
+          onRedoProjectOperation={redoProjectOperation}
+        />
 
         <div className="canvas-toolbar" aria-label="描画設定">
           <label>

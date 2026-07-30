@@ -1,4 +1,6 @@
 export * from './model.js';
+export * from './workspace-projects.js';
+export * from './workspace-commands.js';
 export * from './commands.js';
 export * from './history.js';
 export * from './layers.js';
@@ -33,9 +35,13 @@ export {
   clearLayerHistory,
   createLayerWorkspaceCommandState,
   dispatchProjectCommandWithLayerHistory,
+  dispatchWorkspaceCommandWithLayerHistory,
   getLayerHistory,
   redoProjectCommandWithLayerHistory,
+  redoWorkspaceCommandWithLayerHistory,
+  trimWorkspaceRedoHistoryForExternalProjectBytesWithLayerHistory,
   undoProjectCommandWithLayerHistory,
+  undoWorkspaceCommandWithLayerHistory,
 } from './layer-history.js';
 export type {
   LayerHistoryEntry,
@@ -60,14 +66,19 @@ export {
   createTransformLayerCommand,
   dispatchLayerCommandWithCanvasHistory,
   dispatchProjectCommandWithCanvasHistory,
+  dispatchWorkspaceCommandWithCanvasHistory,
   getCanvasHistory,
   getCanvasHistoryBytes,
+  getWorkspaceRedoRetainedBytesByProject,
   getLayerTransform,
   getRasterDrawing,
   redoCanvasCommand,
   redoProjectCommandWithCanvasHistory,
+  redoWorkspaceCommandWithCanvasHistory,
+  trimWorkspaceRedoHistoryForExternalProjectBytesWithCanvasHistory,
   undoCanvasCommand,
   undoProjectCommandWithCanvasHistory,
+  undoWorkspaceCommandWithCanvasHistory,
 } from './canvas-state.js';
 export type {
   AddRasterFillCommand,
