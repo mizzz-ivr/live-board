@@ -5,12 +5,12 @@ import {
   type ProjectId,
   type Workspace,
   type WorkspaceId,
-} from "./model.js";
+} from './model.js';
 import {
   appendWorkspaceProject,
   renameWorkspaceProject,
   selectWorkspaceProject,
-} from "./workspace-projects.js";
+} from './workspace-projects.js';
 
 export interface WorkspaceCommandMetadata {
   commandId: string;
@@ -18,19 +18,19 @@ export interface WorkspaceCommandMetadata {
 }
 
 export interface AddProjectCommand extends WorkspaceCommandMetadata {
-  type: "workspace.project.add";
+  type: 'workspace.project.add';
   workspaceId: WorkspaceId;
   project: Project;
 }
 
 export interface SelectProjectCommand extends WorkspaceCommandMetadata {
-  type: "workspace.project.select";
+  type: 'workspace.project.select';
   workspaceId: WorkspaceId;
   projectId: ProjectId;
 }
 
 export interface RenameProjectCommand extends WorkspaceCommandMetadata {
-  type: "workspace.project.rename";
+  type: 'workspace.project.rename';
   workspaceId: WorkspaceId;
   projectId: ProjectId;
   name: string;
@@ -52,7 +52,7 @@ export function createAddProjectCommand(
   metadata: WorkspaceCommandMetadata,
 ): AddProjectCommand {
   return {
-    type: "workspace.project.add",
+    type: 'workspace.project.add',
     workspaceId,
     project: cloneProject(project),
     ...metadata,
@@ -65,7 +65,7 @@ export function createSelectProjectCommand(
   metadata: WorkspaceCommandMetadata,
 ): SelectProjectCommand {
   return {
-    type: "workspace.project.select",
+    type: 'workspace.project.select',
     workspaceId,
     projectId,
     ...metadata,
@@ -79,7 +79,7 @@ export function createRenameProjectCommand(
   metadata: WorkspaceCommandMetadata,
 ): RenameProjectCommand {
   return {
-    type: "workspace.project.rename",
+    type: 'workspace.project.rename',
     workspaceId,
     projectId,
     name,
@@ -93,22 +93,19 @@ export function applyWorkspaceCommand(
 ): WorkspaceCommandResult {
   if (workspace.id !== command.workspaceId) {
     throw new DomainError(
-      "WORKSPACE_NOT_FOUND",
+      'WORKSPACE_NOT_FOUND',
       `Workspace not found: ${command.workspaceId}`,
     );
   }
 
-  if (command.type === "workspace.project.add") {
+  if (command.type === 'workspace.project.add') {
     return {
-      workspace: appendWorkspaceProject(
-        workspace,
-        command.project,
-        command.createdAt,
-      ),
+      workspace: appendWorkspaceProject(workspace, command.project, command.createdAt),
       changed: true,
     };
   }
-  if (command.type === "workspace.project.select") {
+
+  if (command.type === 'workspace.project.select') {
     const nextWorkspace = selectWorkspaceProject(
       workspace,
       command.projectId,

@@ -1,4 +1,4 @@
-import type { Project } from "@live-board/domain";
+import type { Project } from '@live-board/domain';
 import {
   useMemo,
   useRef,
@@ -7,7 +7,7 @@ import {
   type DragEvent,
   type KeyboardEvent,
   type SetStateAction,
-} from "react";
+} from 'react';
 import {
   canMoveProjectTab,
   closeProjectTab,
@@ -19,8 +19,8 @@ import {
   toggleProjectTabPin,
   type ProjectTabDropPosition,
   type ProjectTabsState,
-} from "./project-tabs-model";
-import "./project-tabs.css";
+} from './project-tabs-model';
+import './project-tabs.css';
 
 export interface ProjectTabsProps {
   tabs: ProjectTabsState;
@@ -56,19 +56,14 @@ export function ProjectTabs({
   onUndoProjectOperation,
   onRedoProjectOperation,
 }: ProjectTabsProps) {
-  const projectIds = useMemo(
-    () => projects.map((project) => project.id),
-    [projects],
-  );
+  const projectIds = useMemo(() => projects.map((project) => project.id), [projects]);
   const projectsById = useMemo(
     () => new Map(projects.map((project) => [project.id, project])),
     [projects],
   );
   const tabRefs = useRef(new Map<string, HTMLButtonElement>());
   const draggedProjectIdRef = useRef<string | null>(null);
-  const [dropTarget, setDropTarget] = useState<ProjectTabDropTarget | null>(
-    null,
-  );
+  const [dropTarget, setDropTarget] = useState<ProjectTabDropTarget | null>(null);
   const openProjects = tabs.openProjectIds.flatMap((projectId) => {
     const project = projectsById.get(projectId);
     return project === undefined ? [] : [project];
@@ -95,9 +90,9 @@ export function ProjectTabs({
   function reopen(): void {
     const result = reopenLastProjectTab(tabs, projectIds);
     onTabsChange(result.state);
-    if (result.reopenedProjectId !== null)
-      selectAndFocus(result.reopenedProjectId);
+    if (result.reopenedProjectId !== null) selectAndFocus(result.reopenedProjectId);
   }
+
   function togglePin(projectId: string): void {
     onTabsChange((current) => toggleProjectTabPin(current, projectId));
     focusTab(projectId);
@@ -105,14 +100,14 @@ export function ProjectTabs({
 
   function rename(project: Project): void {
     const requestedName = window.prompt(
-      "Project名を入力してください（1〜120文字）",
+      'Project名を入力してください（1〜120文字）',
       project.name,
     );
     if (requestedName === null) return;
 
     const normalizedName = requestedName.trim();
     if (normalizedName.length < 1 || normalizedName.length > 120) {
-      window.alert("Project名は1〜120文字で入力してください");
+      window.alert('Project名は1〜120文字で入力してください');
       return;
     }
     onRename(project.id, normalizedName);
@@ -125,14 +120,14 @@ export function ProjectTabs({
     if (
       (event.ctrlKey || event.metaKey) &&
       event.shiftKey &&
-      (event.key === "ArrowLeft" || event.key === "ArrowRight")
+      (event.key === 'ArrowLeft' || event.key === 'ArrowRight')
     ) {
       event.preventDefault();
       onTabsChange((current) =>
         moveProjectTabByOffset(
           current,
           projectId,
-          event.key === "ArrowLeft" ? -1 : 1,
+          event.key === 'ArrowLeft' ? -1 : 1,
         ),
       );
       focusTab(projectId);
@@ -142,11 +137,7 @@ export function ProjectTabs({
     if (!isNavigationKey(event.key)) return;
     event.preventDefault();
     selectAndFocus(
-      resolveProjectTabNavigation(
-        tabs.openProjectIds,
-        activeProjectId,
-        event.key,
-      ),
+      resolveProjectTabNavigation(tabs.openProjectIds, activeProjectId, event.key),
     );
   }
 
@@ -155,8 +146,8 @@ export function ProjectTabs({
     projectId: string,
   ): void {
     draggedProjectIdRef.current = projectId;
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", projectId);
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', projectId);
   }
 
   function handleDragOver(
@@ -172,10 +163,11 @@ export function ProjectTabs({
     }
 
     event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
+    event.dataTransfer.dropEffect = 'move';
     const bounds = event.currentTarget.getBoundingClientRect();
-    const position =
-      event.clientX < bounds.left + bounds.width / 2 ? "before" : "after";
+    const position = event.clientX < bounds.left + bounds.width / 2
+      ? 'before'
+      : 'after';
     if (
       dropTarget?.projectId !== targetProjectId ||
       dropTarget.position !== position
@@ -199,8 +191,9 @@ export function ProjectTabs({
 
     event.preventDefault();
     const bounds = event.currentTarget.getBoundingClientRect();
-    const position =
-      event.clientX < bounds.left + bounds.width / 2 ? "before" : "after";
+    const position = event.clientX < bounds.left + bounds.width / 2
+      ? 'before'
+      : 'after';
     onTabsChange((current) =>
       moveProjectTab(current, draggedProjectId, targetProjectId, position),
     );
@@ -219,15 +212,16 @@ export function ProjectTabs({
         {openProjects.map((project) => {
           const active = project.id === activeProjectId;
           const pinned = isProjectTabPinned(tabs, project.id);
-          const dropPosition =
-            dropTarget?.projectId === project.id ? dropTarget.position : null;
+          const dropPosition = dropTarget?.projectId === project.id
+            ? dropTarget.position
+            : null;
           return (
             <div
               className={`project-tab-item${
-                dropPosition === null ? "" : ` is-drop-${dropPosition}`
+                dropPosition === null ? '' : ` is-drop-${dropPosition}`
               }`}
               key={project.id}
-              data-pinned={pinned ? "true" : "false"}
+              data-pinned={pinned ? 'true' : 'false'}
               onDragOver={(event) => handleDragOver(event, project.id)}
               onDrop={(event) => handleDrop(event, project.id)}
             >
@@ -241,7 +235,7 @@ export function ProjectTabs({
                 className="project-tab-select"
                 aria-selected={active}
                 tabIndex={active ? 0 : -1}
-                data-unsaved={active && hasUnsavedChanges ? "true" : "false"}
+                data-unsaved={active && hasUnsavedChanges ? 'true' : 'false'}
                 draggable
                 title="Ctrl+Shift+左右キーまたはドラッグで並び替え"
                 onClick={() => onSelect(project.id)}
@@ -250,20 +244,13 @@ export function ProjectTabs({
                 onDragEnd={clearDragState}
               >
                 {pinned ? (
-                  <span className="project-tab-pinned-mark" aria-hidden="true">
-                    ●
-                  </span>
+                  <span className="project-tab-pinned-mark" aria-hidden="true">●</span>
                 ) : null}
                 <span>{project.name}</span>
                 {active && hasUnsavedChanges ? (
-                  <span
-                    className="project-tab-dirty"
-                    aria-label="未保存の変更あり"
-                  >
-                    ●
-                  </span>
+                  <span className="project-tab-dirty" aria-label="未保存の変更あり">●</span>
                 ) : null}
-              </button>{" "}
+              </button>
               <button
                 type="button"
                 className="project-tab-rename"
@@ -275,17 +262,17 @@ export function ProjectTabs({
               <button
                 type="button"
                 className="project-tab-pin"
-                aria-label={`${project.name}のタブを${pinned ? "ピン留め解除" : "ピン留め"}`}
+                aria-label={`${project.name}のタブを${pinned ? 'ピン留め解除' : 'ピン留め'}`}
                 aria-pressed={pinned}
                 onClick={() => togglePin(project.id)}
               >
-                {pinned ? "解除" : "固定"}
+                {pinned ? '解除' : '固定'}
               </button>
               <button
                 type="button"
                 className="project-tab-close"
                 aria-label={`${project.name}のタブを閉じる`}
-                title={pinned ? "ピン留めを解除すると閉じられます" : undefined}
+                title={pinned ? 'ピン留めを解除すると閉じられます' : undefined}
                 disabled={tabs.openProjectIds.length <= 1 || pinned}
                 onClick={() => close(project.id)}
               >
@@ -298,8 +285,8 @@ export function ProjectTabs({
       <div className="project-tab-actions">
         <span className="project-tabs-save-status" role="status">
           {hasUnsavedChanges
-            ? "ワークスペースに未保存の変更あり"
-            : "ワークスペース保存済み"}
+            ? 'ワークスペースに未保存の変更あり'
+            : 'ワークスペース保存済み'}
         </span>
         <button
           type="button"
@@ -320,11 +307,7 @@ export function ProjectTabs({
         <button type="button" onClick={reopen} disabled={!canReopen}>
           閉じたタブを復元
         </button>
-        <button
-          type="button"
-          onClick={onCreate}
-          aria-label="プロジェクトを追加"
-        >
+        <button type="button" onClick={onCreate} aria-label="プロジェクトを追加">
           ＋
         </button>
       </div>
@@ -334,11 +317,6 @@ export function ProjectTabs({
 
 function isNavigationKey(
   key: string,
-): key is "ArrowLeft" | "ArrowRight" | "Home" | "End" {
-  return (
-    key === "ArrowLeft" ||
-    key === "ArrowRight" ||
-    key === "Home" ||
-    key === "End"
-  );
+): key is 'ArrowLeft' | 'ArrowRight' | 'Home' | 'End' {
+  return key === 'ArrowLeft' || key === 'ArrowRight' || key === 'Home' || key === 'End';
 }
