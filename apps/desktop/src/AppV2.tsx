@@ -35,6 +35,7 @@ import {
   createPageRenderSnapshot,
   createProject,
   createProjectAssetLibrary,
+  createRenameProjectCommand,
   createSelectEditPageCommand,
   createSelectProjectCommand,
   createTransformLayerCommand,
@@ -494,6 +495,27 @@ export function AppV2() {
     }
   }
 
+  function renameProject(projectId: string, name: string): void {
+    try {
+      setCommandState((current) =>
+        dispatchWorkspaceCommandWithCanvasHistory(
+          current,
+          createRenameProjectCommand(
+            current.workspace.id,
+            projectId,
+            name,
+            createCommandMetadata('project-rename'),
+          ),
+        ),
+      );
+      setDomainError(null);
+    } catch (error: unknown) {
+      setDomainError(
+        error instanceof DomainError ? error.message : 'Project名の変更に失敗しました',
+      );
+    }
+  }
+
   function undoProjectOperation(): void {
     setCommandState((current) => undoWorkspaceCommandWithCanvasHistory(current));
     setSelection(null);
@@ -751,6 +773,7 @@ export function AppV2() {
           onTabsChange={setProjectTabsState}
           onSelect={selectProject}
           onCreate={createProjectTab}
+          onRename={renameProject}
           onUndoProjectOperation={undoProjectOperation}
           onRedoProjectOperation={redoProjectOperation}
         />

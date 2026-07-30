@@ -8,6 +8,7 @@ import {
 } from './model.js';
 import {
   appendWorkspaceProject,
+  renameWorkspaceProject,
   selectWorkspaceProject,
 } from './workspace-projects.js';
 
@@ -28,7 +29,17 @@ export interface SelectProjectCommand extends WorkspaceCommandMetadata {
   projectId: ProjectId;
 }
 
-export type WorkspaceCommand = AddProjectCommand | SelectProjectCommand;
+export interface RenameProjectCommand extends WorkspaceCommandMetadata {
+  type: 'workspace.project.rename';
+  workspaceId: WorkspaceId;
+  projectId: ProjectId;
+  name: string;
+}
+
+export type WorkspaceCommand =
+  | AddProjectCommand
+  | SelectProjectCommand
+  | RenameProjectCommand;
 
 export interface WorkspaceCommandResult {
   workspace: Workspace;
@@ -61,6 +72,21 @@ export function createSelectProjectCommand(
   };
 }
 
+export function createRenameProjectCommand(
+  workspaceId: WorkspaceId,
+  projectId: ProjectId,
+  name: string,
+  metadata: WorkspaceCommandMetadata,
+): RenameProjectCommand {
+  return {
+    type: 'workspace.project.rename',
+    workspaceId,
+    projectId,
+    name,
+    ...metadata,
+  };
+}
+
 export function applyWorkspaceCommand(
   workspace: Workspace,
   command: WorkspaceCommand,
@@ -79,9 +105,22 @@ export function applyWorkspaceCommand(
     };
   }
 
-  const nextWorkspace = selectWorkspaceProject(
+  if (command.type === 'workspace.project.select') {
+    const nextWorkspace = selectWorkspaceProject(
+      workspace,
+      command.projectId,
+      command.createdAt,
+    );
+    return {
+      workspace: nextWorkspace,
+      changed: nextWorkspace !== workspace,
+    };
+  }
+
+  const nextWorkspace = renameWorkspaceProject(
     workspace,
     command.projectId,
+    command.name,
     command.createdAt,
   );
   return {

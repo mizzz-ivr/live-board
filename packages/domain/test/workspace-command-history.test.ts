@@ -5,6 +5,7 @@ import {
   createAddProjectCommand,
   createPage,
   createProject,
+  createRenameProjectCommand,
   createSelectProjectCommand,
   createWorkspace,
   createWorkspaceCommandState,
@@ -159,4 +160,39 @@ describe('workspace command history', () => {
     expect(getWorkspaceHistory(state).past.length).toBeLessThan(31);
     expect(canUndoWorkspace(state)).toBe(true);
   });
+
+  it('Project名変更をUndo・Redoできる', () => {
+    const renamed = dispatchWorkspaceCommand(
+      createWorkspaceCommandState(workspace()),
+      createRenameProjectCommand('workspace-1', 'project-1', '配信用ボード', {
+        commandId: 'command-rename',
+        createdAt: TIMESTAMP,
+      }),
+    );
+
+    expect(findProject(renamed.workspace, 'project-1').name).toBe('配信用ボード');
+    expect(findProject(undoWorkspaceCommand(renamed).workspace, 'project-1').name).toBe(
+      'project-1',
+    );
+    expect(
+      findProject(
+        redoWorkspaceCommand(undoWorkspaceCommand(renamed)).workspace,
+        'project-1',
+      ).name,
+    ).toBe('配信用ボード');
+  });
+
+  it('同じProject名への変更は履歴を追加しない', () => {
+    const state = createWorkspaceCommandState(workspace());
+    const next = dispatchWorkspaceCommand(
+      state,
+      createRenameProjectCommand('workspace-1', 'project-1', 'project-1', {
+        commandId: 'command-rename-noop',
+        createdAt: TIMESTAMP,
+      }),
+    );
+    expect(next).toBe(state);
+    expect(canUndoWorkspace(next)).toBe(false);
+  });
+
 });

@@ -6,6 +6,7 @@ import {
   createPage,
   createProject,
   createWorkspace,
+  renameWorkspaceProject,
   selectWorkspaceProject,
 } from '../src/index.js';
 
@@ -87,4 +88,34 @@ describe('workspace projects', () => {
       appendWorkspaceProject(workspace(), project('project-3', 'workspace-2'), TIMESTAMP),
     ).toThrow('does not belong to workspace workspace-1');
   });
+
+  it('Project名を前後空白を除去して変更する', () => {
+    const current = workspace();
+    const next = renameWorkspaceProject(current, 'project-1', '  配信用ボード  ', TIMESTAMP);
+
+    expect(next).not.toBe(current);
+    expect(next.projects[0]?.name).toBe('配信用ボード');
+    expect(next.projects[0]?.id).toBe('project-1');
+    expect(next.projects[0]?.pages).toEqual(current.projects[0]?.pages);
+    expect(next.projects[1]).toBe(current.projects[1]);
+    expect(next.activeProjectId).toBe(current.activeProjectId);
+  });
+
+  it('同じProject名への変更は同じWorkspaceを返す', () => {
+    const current = workspace();
+    expect(renameWorkspaceProject(current, 'project-1', ' project-1 ', TIMESTAMP)).toBe(current);
+  });
+
+  it('無効なProject名と存在しないProjectを拒否する', () => {
+    expect(() => renameWorkspaceProject(workspace(), 'project-1', '   ', TIMESTAMP)).toThrow(
+      'Entity name must be 1 to 120 characters',
+    );
+    expect(() =>
+      renameWorkspaceProject(workspace(), 'project-1', 'a'.repeat(121), TIMESTAMP),
+    ).toThrow('Entity name must be 1 to 120 characters');
+    expect(() => renameWorkspaceProject(workspace(), 'missing', '名前', TIMESTAMP)).toThrow(
+      'Project not found: missing',
+    );
+  });
+
 });

@@ -13,15 +13,16 @@ Workspace内の複数ProjectをEditorで切り替え、作業対象を明確に�
 - 各ProjectのPage・Layer・配信設定
 - Project単位のAsset Library
 
-Project追加とProject選択はWorkspaceを変更するため、既存のrevision検知、自動保存、明示保存へ合流します。保存形式とIPCは変更しません。
+Project追加・選択・名前変更はWorkspaceを変更するため、既存のrevision検知、自動保存、明示保存へ合流します。保存形式とIPCは変更しません。
 
 ## Project操作のCommand履歴
 
-Project追加とProject選択は`WorkspaceCommand`として実行します。
+Project追加・選択・名前変更は`WorkspaceCommand`として実行します。
 
 - `workspace.project.add`: Projectを追加して選択
 - `workspace.project.select`: 既存Projectを選択
-- `Project操作を元に戻す`: 直近の追加または選択をUndo
+- `workspace.project.rename`: Project名を変更
+- `Project操作を元に戻す`: 直近の追加・選択・名前変更をUndo
 - `Project操作をやり直す`: Undoした操作をRedo
 
 Workspace全体のSnapshotは履歴へ保存しません。Project追加履歴は次だけを保持します。
@@ -33,6 +34,8 @@ Workspace全体のSnapshotは履歴へ保存しません。Project追加履歴�
 追加ProjectをUndoするときは対象ProjectだけをWorkspaceから除去します。追加後に既存Projectへ加えたPage・Layer・Canvas編集は変更しません。一方、追加Project自身はUndo時点の内容をRedo用Snapshotへ更新するため、追加Projectを編集してからUndoしてもRedoで編集済み内容を復元できます。
 
 Project選択履歴は操作前後のProject IDだけを保持します。選択変更も保存対象・OBS送信先を変更するDomain操作としてUndo / Redoできます。
+
+Project名変更履歴は変更前の名前とCommand上の変更後の名前を保持します。Undo / RedoではProject ID、Page、Layer、Asset、配信設定を変更せず、名前と更新日時だけを切り替えます。
 
 Workspace履歴は件数上限に加えて推定バイト数上限を適用します。履歴entryの推定サイズだけでなく、Redo可能なProjectに紐づいて保持する次の容量もProject単位で合算します。
 
@@ -86,7 +89,8 @@ Project追加をUndoした直後はRedo可能なため、追加Projectに紐づ�
 ## 操作
 
 - `＋`: 初期Pageを持つProjectを追加して選択
-- `操作を元に戻す`: 直近のProject追加またはProject選択をUndo
+- `名前`: 1〜120文字のProject名へ変更
+- `操作を元に戻す`: 直近のProject追加・選択・名前変更をUndo
 - `操作をやり直す`: UndoしたProject操作をRedo
 - タブクリック: `activeProjectId`をCommand経由で変更
 - `ArrowLeft` / `ArrowRight`: 現在の表示順で開いているタブを循環
@@ -114,6 +118,8 @@ OBS同期は`publishActiveProjectBroadcastSnapshot`へ集約し、Workspaceの`a
 - Project追加Undoで既存Projectの後続編集を失わない
 - 追加Projectの編集内容をRedoで復元する
 - Project選択をUndo / Redoできる
+- Project名変更をUndo / Redoできる
+- 無効なProject名をDomain境界で拒否する
 - Workspace履歴が推定バイト数上限を超えない
 - Redo可能なProjectのAsset容量をWorkspace履歴上限へ含める
 - Redo可能なProjectのProject / Page / Layer / Canvas履歴容量をWorkspace履歴上限へ含める
@@ -132,7 +138,8 @@ OBS同期は`publishActiveProjectBroadcastSnapshot`へ集約し、Workspaceの`a
 
 Domain層で次を拒否します。
 
-- 存在しないProjectの選択
+- 存在しないProjectの選択・名前変更
+- 空文字、空白のみ、121文字以上のProject名
 - 重複Project IDの追加
 - 別Workspaceに属するProjectの追加
 - 対象Workspace IDが一致しないWorkspace Command
@@ -147,7 +154,7 @@ Rendererタブモデルでは次を無変更として扱います。
 
 ## 対象外
 
-- Project本体の削除、名前変更、複製
+- Project本体の削除、複製
 - Project本体の並び順変更
 - タブ状態の永続化
 - 別ウィンドウへの分離
