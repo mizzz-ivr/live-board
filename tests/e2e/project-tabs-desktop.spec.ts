@@ -1,4 +1,20 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
+
+async function dragTabBefore(page: Page, source: Locator, target: Locator): Promise<void> {
+  const targetBounds = await target.boundingBox();
+  if (targetBounds === null) throw new Error('ドラッグ先のタブ領域を取得できません');
+
+  const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+  const eventInit = {
+    dataTransfer,
+    clientX: targetBounds.x + 1,
+    clientY: targetBounds.y + targetBounds.height / 2,
+  };
+  await source.dispatchEvent('dragstart', { dataTransfer });
+  await target.dispatchEvent('dragover', eventInit);
+  await target.dispatchEvent('drop', eventInit);
+  await source.dispatchEvent('dragend', { dataTransfer });
+}
 
 test('Projectタブを追加・Project操作Undo・切り替え・閉じる・ホーム往復後に復元できる', async ({
   page,
@@ -80,11 +96,11 @@ test('Projectタブをピン留めし、キーボードとドラッグで並び�
   await expect(tablist.getByRole('tab').nth(1)).toContainText('プロジェクト 2');
   await expect(tablist.getByRole('tab').nth(2)).toContainText('新しいプロジェクト');
 
-  await firstTab.dragTo(secondTab, { targetPosition: { x: 2, y: 10 } });
+  await dragTabBefore(page, firstTab, secondTab.locator('..'));
   await expect(tablist.getByRole('tab').nth(1)).toContainText('新しいプロジェクト');
   await expect(tablist.getByRole('tab').nth(2)).toContainText('プロジェクト 2');
 
-  await secondTab.dragTo(thirdTab, { targetPosition: { x: 2, y: 10 } });
+  await dragTabBefore(page, secondTab, thirdTab.locator('..'));
   await expect(tablist.getByRole('tab').nth(0)).toContainText('プロジェクト 3');
   await expect(tablist.getByRole('tab').nth(1)).toContainText('新しいプロジェクト');
   await expect(tablist.getByRole('tab').nth(2)).toContainText('プロジェクト 2');
