@@ -58,7 +58,7 @@ jobs:
               file.write_text(text[:match.start()] + new + text[match.end():])'''
           text, count = re.subn(
               r'def replace_once\(.*?\n\ndef append_before_final',
-              helper + '\n\ndef append_before_final',
+              lambda _: helper + '\n\ndef append_before_final',
               text,
               count=1,
               flags=re.S,
