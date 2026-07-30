@@ -1,11 +1,19 @@
 const RECENTLY_CLOSED_LIMIT = 10;
 
+export interface RecentlyClosedProjectTab {
+  projectId: string;
+  unpinnedIndex: number;
+}
+
 export interface ProjectTabsState {
   workspaceId: string;
   sessionRevision: number;
   openProjectIds: string[];
-  recentlyClosedProjectIds: string[];
+  pinnedProjectIds: string[];
+  recentlyClosedTabs: RecentlyClosedProjectTab[];
 }
+
+export type ProjectTabDropPosition = 'before' | 'after';
 
 export function createProjectTabsState(
   workspaceId: string,
@@ -16,7 +24,8 @@ export function createProjectTabsState(
     workspaceId,
     sessionRevision,
     openProjectIds: [...projectIds],
-    recentlyClosedProjectIds: [],
+    pinnedProjectIds: [],
+    recentlyClosedTabs: [],
   };
 }
 
@@ -37,7 +46,7 @@ export function synchronizeProjectTabsState(
   const availableIds = new Set(projectIds);
   const knownIds = new Set([
     ...state.openProjectIds,
-    ...state.recentlyClosedProjectIds,
+    ...state.recentlyClosedTabs.map((tab) => tab.projectId),
   ]);
   const openProjectIds = state.openProjectIds.filter((id) => availableIds.has(id));
   for (const projectId of projectIds) {
@@ -48,13 +57,19 @@ export function synchronizeProjectTabsState(
   }
 
   const openSet = new Set(openProjectIds);
-  const nextOpenProjectIds = sortByProjectOrder(openProjectIds, projectIds);
-  const nextRecentlyClosedProjectIds = state.recentlyClosedProjectIds.filter(
-    (id) => availableIds.has(id) && !openSet.has(id),
+  const pinnedSet = new Set(
+    state.pinnedProjectIds.filter((id) => availableIds.has(id) && openSet.has(id)),
+  );
+  const nextOpenProjectIds = normalizeOpenProjectOrder(openProjectIds, pinnedSet);
+  const nextPinnedProjectIds = nextOpenProjectIds.filter((id) => pinnedSet.has(id));
+  const nextOpenSet = new Set(nextOpenProjectIds);
+  const nextRecentlyClosedTabs = state.recentlyClosedTabs.filter(
+    (tab) => availableIds.has(tab.projectId) && !nextOpenSet.has(tab.projectId),
   );
   if (
     arraysEqual(state.openProjectIds, nextOpenProjectIds) &&
-    arraysEqual(state.recentlyClosedProjectIds, nextRecentlyClosedProjectIds)
+    arraysEqual(state.pinnedProjectIds, nextPinnedProjectIds) &&
+    recentlyClosedTabsEqual(state.recentlyClosedTabs, nextRecentlyClosedTabs)
   ) {
     return state;
   }
@@ -63,8 +78,102 @@ export function synchronizeProjectTabsState(
     workspaceId,
     sessionRevision,
     openProjectIds: nextOpenProjectIds,
-    recentlyClosedProjectIds: nextRecentlyClosedProjectIds,
+    pinnedProjectIds: nextPinnedProjectIds,
+    recentlyClosedTabs: nextRecentlyClosedTabs,
   };
+}
+
+export function isProjectTabPinned(
+  state: ProjectTabsState,
+  projectId: string,
+): boolean {
+  return state.pinnedProjectIds.includes(projectId);
+}
+
+export function toggleProjectTabPin(
+  state: ProjectTabsState,
+  projectId: string,
+): ProjectTabsState {
+  if (!state.openProjectIds.includes(projectId)) return state;
+
+  const pinnedSet = new Set(state.pinnedProjectIds);
+  if (pinnedSet.has(projectId)) pinnedSet.delete(projectId);
+  else pinnedSet.add(projectId);
+
+  const openProjectIds = normalizeOpenProjectOrder(state.openProjectIds, pinnedSet);
+  const pinnedProjectIds = openProjectIds.filter((id) => pinnedSet.has(id));
+  if (
+    arraysEqual(state.openProjectIds, openProjectIds) &&
+    arraysEqual(state.pinnedProjectIds, pinnedProjectIds)
+  ) {
+    return state;
+  }
+
+  return {
+    ...state,
+    openProjectIds,
+    pinnedProjectIds,
+  };
+}
+
+export function canMoveProjectTab(
+  state: ProjectTabsState,
+  projectId: string,
+  targetProjectId: string,
+): boolean {
+  return (
+    projectId !== targetProjectId &&
+    state.openProjectIds.includes(projectId) &&
+    state.openProjectIds.includes(targetProjectId) &&
+    isProjectTabPinned(state, projectId) === isProjectTabPinned(state, targetProjectId)
+  );
+}
+
+export function moveProjectTab(
+  state: ProjectTabsState,
+  projectId: string,
+  targetProjectId: string,
+  position: ProjectTabDropPosition,
+): ProjectTabsState {
+  if (!canMoveProjectTab(state, projectId, targetProjectId)) return state;
+
+  const openProjectIds = state.openProjectIds.filter((id) => id !== projectId);
+  const targetIndex = openProjectIds.indexOf(targetProjectId);
+  const insertIndex = position === 'before' ? targetIndex : targetIndex + 1;
+  openProjectIds.splice(insertIndex, 0, projectId);
+  if (arraysEqual(state.openProjectIds, openProjectIds)) return state;
+
+  return {
+    ...state,
+    openProjectIds,
+    pinnedProjectIds: openProjectIds.filter((id) =>
+      state.pinnedProjectIds.includes(id),
+    ),
+  };
+}
+
+export function moveProjectTabByOffset(
+  state: ProjectTabsState,
+  projectId: string,
+  offset: -1 | 1,
+): ProjectTabsState {
+  if (!state.openProjectIds.includes(projectId)) return state;
+
+  const pinned = isProjectTabPinned(state, projectId);
+  const groupIds = state.openProjectIds.filter(
+    (id) => isProjectTabPinned(state, id) === pinned,
+  );
+  const currentIndex = groupIds.indexOf(projectId);
+  const nextIndex = currentIndex + offset;
+  if (currentIndex < 0 || nextIndex < 0 || nextIndex >= groupIds.length) return state;
+
+  const targetProjectId = groupIds[nextIndex]!;
+  return moveProjectTab(
+    state,
+    projectId,
+    targetProjectId,
+    offset < 0 ? 'before' : 'after',
+  );
 }
 
 export function closeProjectTab(
@@ -73,10 +182,18 @@ export function closeProjectTab(
   activeProjectId: string,
 ): { state: ProjectTabsState; nextActiveProjectId: string } {
   const closeIndex = state.openProjectIds.indexOf(projectId);
-  if (closeIndex < 0 || state.openProjectIds.length <= 1) {
+  if (
+    closeIndex < 0 ||
+    state.openProjectIds.length <= 1 ||
+    isProjectTabPinned(state, projectId)
+  ) {
     return { state, nextActiveProjectId: activeProjectId };
   }
 
+  const unpinnedProjectIds = state.openProjectIds.filter(
+    (id) => !isProjectTabPinned(state, id),
+  );
+  const unpinnedIndex = unpinnedProjectIds.indexOf(projectId);
   const openProjectIds = state.openProjectIds.filter((id) => id !== projectId);
   const nextActiveProjectId = activeProjectId === projectId
     ? openProjectIds[Math.min(closeIndex, openProjectIds.length - 1)]!
@@ -86,9 +203,9 @@ export function closeProjectTab(
     state: {
       ...state,
       openProjectIds,
-      recentlyClosedProjectIds: [
-        projectId,
-        ...state.recentlyClosedProjectIds.filter((id) => id !== projectId),
+      recentlyClosedTabs: [
+        { projectId, unpinnedIndex },
+        ...state.recentlyClosedTabs.filter((tab) => tab.projectId !== projectId),
       ].slice(0, RECENTLY_CLOSED_LIMIT),
     },
     nextActiveProjectId,
@@ -100,25 +217,36 @@ export function reopenLastProjectTab(
   projectIds: readonly string[],
 ): { state: ProjectTabsState; reopenedProjectId: string | null } {
   const availableIds = new Set(projectIds);
-  const reopenedProjectId = state.recentlyClosedProjectIds.find(
-    (id) => availableIds.has(id) && !state.openProjectIds.includes(id),
+  const recentlyClosedTab = state.recentlyClosedTabs.find(
+    (tab) =>
+      availableIds.has(tab.projectId) &&
+      !state.openProjectIds.includes(tab.projectId),
   );
-  if (reopenedProjectId === undefined) {
+  if (recentlyClosedTab === undefined) {
     return { state, reopenedProjectId: null };
   }
+
+  const pinnedProjectIds = state.openProjectIds.filter((id) =>
+    isProjectTabPinned(state, id),
+  );
+  const unpinnedProjectIds = state.openProjectIds.filter(
+    (id) => !isProjectTabPinned(state, id),
+  );
+  unpinnedProjectIds.splice(
+    Math.min(recentlyClosedTab.unpinnedIndex, unpinnedProjectIds.length),
+    0,
+    recentlyClosedTab.projectId,
+  );
 
   return {
     state: {
       ...state,
-      openProjectIds: sortByProjectOrder(
-        [...state.openProjectIds, reopenedProjectId],
-        projectIds,
-      ),
-      recentlyClosedProjectIds: state.recentlyClosedProjectIds.filter(
-        (id) => id !== reopenedProjectId,
+      openProjectIds: [...pinnedProjectIds, ...unpinnedProjectIds],
+      recentlyClosedTabs: state.recentlyClosedTabs.filter(
+        (tab) => tab.projectId !== recentlyClosedTab.projectId,
       ),
     },
-    reopenedProjectId,
+    reopenedProjectId: recentlyClosedTab.projectId,
   };
 }
 
@@ -137,14 +265,27 @@ export function resolveProjectTabNavigation(
   return openProjectIds[nextIndex]!;
 }
 
-function sortByProjectOrder(
-  ids: readonly string[],
-  projectIds: readonly string[],
+function normalizeOpenProjectOrder(
+  openProjectIds: readonly string[],
+  pinnedProjectIds: ReadonlySet<string>,
 ): string[] {
-  const idSet = new Set(ids);
-  return projectIds.filter((id) => idSet.has(id));
+  return [
+    ...openProjectIds.filter((id) => pinnedProjectIds.has(id)),
+    ...openProjectIds.filter((id) => !pinnedProjectIds.has(id)),
+  ];
 }
 
 function arraysEqual(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function recentlyClosedTabsEqual(
+  left: readonly RecentlyClosedProjectTab[],
+  right: readonly RecentlyClosedProjectTab[],
+): boolean {
+  return left.length === right.length && left.every(
+    (value, index) =>
+      value.projectId === right[index]?.projectId &&
+      value.unpinnedIndex === right[index]?.unpinnedIndex,
+  );
 }
