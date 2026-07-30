@@ -2,7 +2,9 @@ import {
   DomainError,
   assertWorkspaceIntegrity,
   cloneProject,
+  createProject,
   findProject,
+  replaceProject,
   type Project,
   type ProjectId,
   type Workspace,
@@ -51,4 +53,23 @@ export function selectWorkspaceProject(
   };
   assertWorkspaceIntegrity(nextWorkspace);
   return nextWorkspace;
+}
+
+
+export function renameWorkspaceProject(
+  workspace: Workspace,
+  projectId: ProjectId,
+  name: string,
+  updatedAt = new Date().toISOString(),
+): Workspace {
+  const project = findProject(workspace, projectId);
+  const normalizedName = name.trim();
+  if (project.name === normalizedName) return workspace;
+
+  const renamedProject = createProject({
+    ...project,
+    name: normalizedName,
+    updatedAt,
+  });
+  return replaceProject(workspace, renamedProject, updatedAt);
 }

@@ -32,6 +32,7 @@ export interface ProjectTabsProps {
   onTabsChange: Dispatch<SetStateAction<ProjectTabsState>>;
   onSelect(projectId: string): void;
   onCreate(): void;
+  onRename(projectId: string, name: string): void;
   onUndoProjectOperation(): void;
   onRedoProjectOperation(): void;
 }
@@ -51,6 +52,7 @@ export function ProjectTabs({
   onTabsChange,
   onSelect,
   onCreate,
+  onRename,
   onUndoProjectOperation,
   onRedoProjectOperation,
 }: ProjectTabsProps) {
@@ -89,14 +91,27 @@ export function ProjectTabs({
     const result = reopenLastProjectTab(tabs, projectIds);
     onTabsChange(result.state);
     if (result.reopenedProjectId !== null) selectAndFocus(result.reopenedProjectId);
+  }  function togglePin(projectId: string): void {
+  onTabsChange((current) => toggleProjectTabPin(current, projectId));
+  focusTab(projectId);
+}
+
+  function rename(project: Project): void {
+    const requestedName = window.prompt(
+      'Project名を入力してください（1〜120文字）',
+      project.name,
+    );
+    if (requestedName === null) return;
+
+    const normalizedName = requestedName.trim();
+    if (normalizedName.length < 1 || normalizedName.length > 120) {
+      window.alert('Project名は1〜120文字で入力してください');
+      return;
+    }
+    onRename(project.id, normalizedName);
   }
 
-  function togglePin(projectId: string): void {
-    onTabsChange((current) => toggleProjectTabPin(current, projectId));
-    focusTab(projectId);
-  }
-
-  function handleTabKeyDown(
+function handleTabKeyDown(
     event: KeyboardEvent<HTMLButtonElement>,
     projectId: string,
   ): void {
@@ -233,11 +248,18 @@ export function ProjectTabs({
                 {active && hasUnsavedChanges ? (
                   <span className="project-tab-dirty" aria-label="未保存の変更あり">●</span>
                 ) : null}
-              </button>
-              <button
-                type="button"
-                className="project-tab-pin"
-                aria-label={`${project.name}のタブを${pinned ? 'ピン留め解除' : 'ピン留め'}`}
+              </button>              <button
+      type="button"
+      className="project-tab-rename"
+      aria-label={`${project.name}の名前を変更`}
+      onClick={() => rename(project)}
+    >
+      名前
+    </button>
+    <button
+      type="button"
+      className="project-tab-pin"
+aria-label={`${project.name}のタブを${pinned ? 'ピン留め解除' : 'ピン留め'}`}
                 aria-pressed={pinned}
                 onClick={() => togglePin(project.id)}
               >

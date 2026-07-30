@@ -15,11 +15,13 @@ import {
 import {
   applyWorkspaceCommand,
   type AddProjectCommand,
+  type RenameProjectCommand,
   type SelectProjectCommand,
   type WorkspaceCommand,
 } from './workspace-commands.js';
 import {
   appendWorkspaceProject,
+  renameWorkspaceProject,
   selectWorkspaceProject,
 } from './workspace-projects.js';
 
@@ -42,9 +44,16 @@ export interface SelectProjectWorkspaceHistoryEntry
   command: SelectProjectCommand;
 }
 
+export interface RenameProjectWorkspaceHistoryEntry
+  extends WorkspaceHistoryEntryBase {
+  command: RenameProjectCommand;
+  previousName: string;
+}
+
 export type WorkspaceHistoryEntry =
   | AddProjectWorkspaceHistoryEntry
-  | SelectProjectWorkspaceHistoryEntry;
+  | SelectProjectWorkspaceHistoryEntry
+  | RenameProjectWorkspaceHistoryEntry;
 
 export interface WorkspaceHistoryStack {
   past: WorkspaceHistoryEntry[];
@@ -113,14 +122,13 @@ export function dispatchWorkspaceCommand(
 ): WorkspaceCommandState {
   const previousActiveProjectId = state.workspace.activeProjectId;
   const result = applyWorkspaceCommand(state.workspace, command);
-  if (!result.changed) return state;
-
-  const entry = createWorkspaceHistoryEntry(
-    result.workspace,
-    command,
-    previousActiveProjectId,
-  );
-  const past = trimWorkspaceHistory(
+  if (!result.changed) return state;  const entry = createWorkspaceHistoryEntry(
+  state.workspace,
+  result.workspace,
+  command,
+  previousActiveProjectId,
+);
+const past = trimWorkspaceHistory(
     [...state.histories.workspace.past, entry].slice(-state.historyLimit),
     state.workspaceHistoryMemoryLimitBytes,
   );
@@ -408,6 +416,7 @@ export function clearProjectHistory(
 }
 
 function createWorkspaceHistoryEntry(
+  previousWorkspace: Workspace,
   workspace: Workspace,
   command: WorkspaceCommand,
   previousActiveProjectId: ProjectId,
@@ -418,6 +427,14 @@ function createWorkspaceHistoryEntry(
       command,
       previousActiveProjectId,
       projectSnapshot: cloneProject(findProject(workspace, command.project.id)),
+    });
+  }
+  if (command.type === 'workspace.project.rename') {
+    return withWorkspaceHistoryEstimate({
+      historyId: `workspace-history:${command.commandId}`,
+      command,
+      previousActiveProjectId,
+      previousName: findProject(previousWorkspace, command.projectId).name,
     });
   }
   return withWorkspaceHistoryEstimate({
@@ -445,18 +462,28 @@ function undoWorkspaceHistoryEntry(
       ),
       futureEntry: withWorkspaceHistoryEstimate({
         ...entry,
-        projectSnapshot,
-      }),
-    };
-  }
+        projectSnapshot,      }),
+  };
+}
+if (isRenameProjectWorkspaceHistoryEntry(entry)) {
   return {
-    workspace: selectWorkspaceProject(
+    workspace: renameWorkspaceProject(
       workspace,
-      entry.previousActiveProjectId,
+      entry.command.projectId,
+      entry.previousName,
       updatedAt,
     ),
     futureEntry: entry,
   };
+}
+return {
+  workspace: selectWorkspaceProject(
+    workspace,
+    entry.previousActiveProjectId,
+    updatedAt,
+  ),
+  futureEntry: entry,
+};
 }
 
 function redoWorkspaceHistoryEntry(
@@ -474,27 +501,43 @@ function redoWorkspaceHistoryEntry(
       ),
       pastEntry: withWorkspaceHistoryEstimate({
         ...entry,
-        previousActiveProjectId,
-      }),
-    };
-  }
+        previousActiveProjectId,      }),
+  };
+}
+if (isRenameProjectWorkspaceHistoryEntry(entry)) {
   return {
-    workspace: selectWorkspaceProject(
+    workspace: renameWorkspaceProject(
       workspace,
       entry.command.projectId,
+      entry.command.name,
       updatedAt,
     ),
-    pastEntry: withWorkspaceHistoryEstimate({
-      ...entry,
-      previousActiveProjectId,
-    }),
+    pastEntry: entry,
   };
+}
+return {
+  workspace: selectWorkspaceProject(
+    workspace,
+    entry.command.projectId,
+    updatedAt,
+  ),
+  pastEntry: withWorkspaceHistoryEstimate({
+    ...entry,
+    previousActiveProjectId,
+  }),
+};
 }
 
 function isAddProjectWorkspaceHistoryEntry(
   entry: WorkspaceHistoryEntry,
 ): entry is AddProjectWorkspaceHistoryEntry {
   return entry.command.type === 'workspace.project.add';
+}
+
+function isRenameProjectWorkspaceHistoryEntry(
+  entry: WorkspaceHistoryEntry,
+): entry is RenameProjectWorkspaceHistoryEntry {
+  return entry.command.type === 'workspace.project.rename';
 }
 
 function removeAddedProject(

@@ -113,3 +113,27 @@ test('Projectタブをピン留めし、キーボードとドラッグで並び�
     page.getByRole('button', { name: 'プロジェクト 3のタブをピン留め解除' }),
   ).toHaveAttribute('aria-pressed', 'true');
 });
+
+
+test('Project名を変更し、Project操作でUndo・Redoできる', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas-surface')).toBeVisible();
+
+  const tablist = page.getByRole('tablist', { name: 'プロジェクト' });
+  const originalTab = tablist.getByRole('tab', { name: /新しいプロジェクト/ });
+  await expect(originalTab).toHaveAttribute('aria-selected', 'true');
+
+  page.once('dialog', async (dialog) => dialog.accept('  配信用ボード  '));
+  await page.getByRole('button', { name: '新しいプロジェクトの名前を変更' }).click();
+
+  const renamedTab = tablist.getByRole('tab', { name: /配信用ボード/ });
+  await expect(renamedTab).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByText('ワークスペースに未保存の変更あり')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Project操作を元に戻す' }).click();
+  await expect(tablist.getByRole('tab', { name: /新しいプロジェクト/ })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Project操作をやり直す' }).click();
+  await expect(renamedTab).toBeVisible();
+  await expect(renamedTab).toHaveAttribute('aria-selected', 'true');
+});
