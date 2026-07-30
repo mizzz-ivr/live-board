@@ -7,23 +7,20 @@ import {
   type Project,
   type ProjectId,
   type Workspace,
-} from './model.js';
-import {
-  applyProjectCommand,
-  type ProjectCommand,
-} from './commands.js';
+} from "./model.js";
+import { applyProjectCommand, type ProjectCommand } from "./commands.js";
 import {
   applyWorkspaceCommand,
   type AddProjectCommand,
   type RenameProjectCommand,
   type SelectProjectCommand,
   type WorkspaceCommand,
-} from './workspace-commands.js';
+} from "./workspace-commands.js";
 import {
   appendWorkspaceProject,
   renameWorkspaceProject,
   selectWorkspaceProject,
-} from './workspace-projects.js';
+} from "./workspace-projects.js";
 
 const DEFAULT_WORKSPACE_HISTORY_MEMORY_LIMIT_BYTES = 64 * 1024 * 1024;
 
@@ -91,7 +88,11 @@ export function createWorkspaceCommandState(
   historyLimit = 100,
   workspaceHistoryMemoryLimitBytes = DEFAULT_WORKSPACE_HISTORY_MEMORY_LIMIT_BYTES,
 ): WorkspaceCommandState {
-  if (!Number.isInteger(historyLimit) || historyLimit < 1 || historyLimit > 1000) {
+  if (
+    !Number.isInteger(historyLimit) ||
+    historyLimit < 1 ||
+    historyLimit > 1000
+  ) {
     throw new Error(`Invalid history limit: ${historyLimit}`);
   }
   if (
@@ -122,13 +123,14 @@ export function dispatchWorkspaceCommand(
 ): WorkspaceCommandState {
   const previousActiveProjectId = state.workspace.activeProjectId;
   const result = applyWorkspaceCommand(state.workspace, command);
-  if (!result.changed) return state;  const entry = createWorkspaceHistoryEntry(
-  state.workspace,
-  result.workspace,
-  command,
-  previousActiveProjectId,
-);
-const past = trimWorkspaceHistory(
+  if (!result.changed) return state;
+  const entry = createWorkspaceHistoryEntry(
+    state.workspace,
+    result.workspace,
+    command,
+    previousActiveProjectId,
+  );
+  const past = trimWorkspaceHistory(
     [...state.histories.workspace.past, entry].slice(-state.historyLimit),
     state.workspaceHistoryMemoryLimitBytes,
   );
@@ -178,7 +180,9 @@ export function redoWorkspaceCommand(
 
   const redone = redoWorkspaceHistoryEntry(state.workspace, entry);
   const past = trimWorkspaceHistory(
-    [...state.histories.workspace.past, redone.pastEntry].slice(-state.historyLimit),
+    [...state.histories.workspace.past, redone.pastEntry].slice(
+      -state.historyLimit,
+    ),
     state.workspaceHistoryMemoryLimitBytes,
   );
 
@@ -202,9 +206,7 @@ export function getWorkspaceHistory(
   return state.histories.workspace;
 }
 
-export function getWorkspaceHistoryBytes(
-  state: WorkspaceCommandState,
-): number {
+export function getWorkspaceHistoryBytes(state: WorkspaceCommandState): number {
   return [
     ...state.histories.workspace.past,
     ...state.histories.workspace.future,
@@ -235,7 +237,9 @@ export function getWorkspaceHistoryRetainedProjectIds(
   return [
     ...new Set([
       ...state.workspace.projects.map((project) => project.id),
-      ...getWorkspaceHistoryRestorableProjects(state).map((project) => project.id),
+      ...getWorkspaceHistoryRestorableProjects(state).map(
+        (project) => project.id,
+      ),
     ]),
   ];
 }
@@ -277,12 +281,16 @@ export function dispatchProjectCommand(
   state: WorkspaceCommandState,
   command: ProjectCommand,
 ): WorkspaceCommandState {
-  const beforeProject = cloneProject(findProject(state.workspace, command.targetId));
+  const beforeProject = cloneProject(
+    findProject(state.workspace, command.targetId),
+  );
   const result = applyProjectCommand(state.workspace, command);
 
   if (!result.changed) return state;
 
-  const afterProject = cloneProject(findProject(result.workspace, command.targetId));
+  const afterProject = cloneProject(
+    findProject(result.workspace, command.targetId),
+  );
   const entry: HistoryEntry = {
     historyId: `history:${command.commandId}`,
     command,
@@ -421,7 +429,7 @@ function createWorkspaceHistoryEntry(
   command: WorkspaceCommand,
   previousActiveProjectId: ProjectId,
 ): WorkspaceHistoryEntry {
-  if (command.type === 'workspace.project.add') {
+  if (command.type === "workspace.project.add") {
     return withWorkspaceHistoryEstimate({
       historyId: `workspace-history:${command.commandId}`,
       command,
@@ -429,7 +437,7 @@ function createWorkspaceHistoryEntry(
       projectSnapshot: cloneProject(findProject(workspace, command.project.id)),
     });
   }
-  if (command.type === 'workspace.project.rename') {
+  if (command.type === "workspace.project.rename") {
     return withWorkspaceHistoryEstimate({
       historyId: `workspace-history:${command.commandId}`,
       command,
@@ -462,28 +470,29 @@ function undoWorkspaceHistoryEntry(
       ),
       futureEntry: withWorkspaceHistoryEstimate({
         ...entry,
-        projectSnapshot,      }),
-  };
-}
-if (isRenameProjectWorkspaceHistoryEntry(entry)) {
+        projectSnapshot,
+      }),
+    };
+  }
+  if (isRenameProjectWorkspaceHistoryEntry(entry)) {
+    return {
+      workspace: renameWorkspaceProject(
+        workspace,
+        entry.command.projectId,
+        entry.previousName,
+        updatedAt,
+      ),
+      futureEntry: entry,
+    };
+  }
   return {
-    workspace: renameWorkspaceProject(
+    workspace: selectWorkspaceProject(
       workspace,
-      entry.command.projectId,
-      entry.previousName,
+      entry.previousActiveProjectId,
       updatedAt,
     ),
     futureEntry: entry,
   };
-}
-return {
-  workspace: selectWorkspaceProject(
-    workspace,
-    entry.previousActiveProjectId,
-    updatedAt,
-  ),
-  futureEntry: entry,
-};
 }
 
 function redoWorkspaceHistoryEntry(
@@ -501,43 +510,44 @@ function redoWorkspaceHistoryEntry(
       ),
       pastEntry: withWorkspaceHistoryEstimate({
         ...entry,
-        previousActiveProjectId,      }),
-  };
-}
-if (isRenameProjectWorkspaceHistoryEntry(entry)) {
+        previousActiveProjectId,
+      }),
+    };
+  }
+  if (isRenameProjectWorkspaceHistoryEntry(entry)) {
+    return {
+      workspace: renameWorkspaceProject(
+        workspace,
+        entry.command.projectId,
+        entry.command.name,
+        updatedAt,
+      ),
+      pastEntry: entry,
+    };
+  }
   return {
-    workspace: renameWorkspaceProject(
+    workspace: selectWorkspaceProject(
       workspace,
       entry.command.projectId,
-      entry.command.name,
       updatedAt,
     ),
-    pastEntry: entry,
+    pastEntry: withWorkspaceHistoryEstimate({
+      ...entry,
+      previousActiveProjectId,
+    }),
   };
-}
-return {
-  workspace: selectWorkspaceProject(
-    workspace,
-    entry.command.projectId,
-    updatedAt,
-  ),
-  pastEntry: withWorkspaceHistoryEstimate({
-    ...entry,
-    previousActiveProjectId,
-  }),
-};
 }
 
 function isAddProjectWorkspaceHistoryEntry(
   entry: WorkspaceHistoryEntry,
 ): entry is AddProjectWorkspaceHistoryEntry {
-  return entry.command.type === 'workspace.project.add';
+  return entry.command.type === "workspace.project.add";
 }
 
 function isRenameProjectWorkspaceHistoryEntry(
   entry: WorkspaceHistoryEntry,
 ): entry is RenameProjectWorkspaceHistoryEntry {
-  return entry.command.type === 'workspace.project.rename';
+  return entry.command.type === "workspace.project.rename";
 }
 
 function removeAddedProject(
@@ -547,9 +557,11 @@ function removeAddedProject(
   updatedAt: string,
 ): Workspace {
   findProject(workspace, projectId);
-  const projects = workspace.projects.filter((project) => project.id !== projectId);
+  const projects = workspace.projects.filter(
+    (project) => project.id !== projectId,
+  );
   if (projects.length === 0) {
-    throw new Error('WORKSPACE_PROJECT_REQUIRED');
+    throw new Error("WORKSPACE_PROJECT_REQUIRED");
   }
   const preferredActiveProjectId = projects.some(
     (project) => project.id === previousActiveProjectId,
@@ -592,7 +604,9 @@ function retainReachableCommandHistories(
         ),
       ),
       page: Object.fromEntries(
-        Object.entries(state.histories.page).filter(([pageId]) => pageIds.has(pageId)),
+        Object.entries(state.histories.page).filter(([pageId]) =>
+          pageIds.has(pageId),
+        ),
       ),
     },
   };
@@ -621,9 +635,9 @@ function getWorkspaceHistoryAndExternalBytes(
   return historyBytes + externalBytes;
 }
 
-function withWorkspaceHistoryEstimate<T extends Omit<WorkspaceHistoryEntry, 'estimatedBytes'>>(
-  entry: T,
-): T & { estimatedBytes: number } {
+function withWorkspaceHistoryEstimate<
+  T extends Omit<WorkspaceHistoryEntry, "estimatedBytes">,
+>(entry: T): T & { estimatedBytes: number } {
   return {
     ...entry,
     estimatedBytes: utf8ByteLength(JSON.stringify(entry)),
@@ -652,7 +666,9 @@ function estimateHistoryBytes(
   afterProject: Project,
   command: ProjectCommand,
 ): number {
-  return utf8ByteLength(JSON.stringify({ beforeProject, afterProject, command }));
+  return utf8ByteLength(
+    JSON.stringify({ beforeProject, afterProject, command }),
+  );
 }
 
 function utf8ByteLength(value: string): number {

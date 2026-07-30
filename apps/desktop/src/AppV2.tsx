@@ -8,7 +8,7 @@ import {
   type RenderMetrics,
   type SelectionMode,
   type SnapSettings,
-} from '@live-board/canvas-engine';
+} from "@live-board/canvas-engine";
 import {
   AssetValidationError,
   DomainError,
@@ -68,7 +68,7 @@ import {
   type ProjectAsset,
   type ProjectAssetLibrary,
   type ProjectCommand,
-} from '@live-board/domain';
+} from "@live-board/domain";
 import {
   useCallback,
   useEffect,
@@ -77,33 +77,33 @@ import {
   useState,
   type Dispatch,
   type SetStateAction,
-} from 'react';
-import { AssetPanel } from './AssetPanel';
-import { publishActiveProjectBroadcastSnapshot } from './project-broadcast-sync';
-import { BroadcastControlPanel } from './BroadcastControlPanel';
-import { CanvasSurfaceV2 } from './CanvasSurfaceV2';
-import { LayerPanel } from './LayerPanel';
-import { PageThumbnail } from './PageThumbnail';
-import { ProjectTabs } from './ProjectTabs';
+} from "react";
+import { AssetPanel } from "./AssetPanel";
+import { publishActiveProjectBroadcastSnapshot } from "./project-broadcast-sync";
+import { BroadcastControlPanel } from "./BroadcastControlPanel";
+import { CanvasSurfaceV2 } from "./CanvasSurfaceV2";
+import { LayerPanel } from "./LayerPanel";
+import { PageThumbnail } from "./PageThumbnail";
+import { ProjectTabs } from "./ProjectTabs";
 import {
   createProjectTabsState,
   synchronizeProjectTabsState,
-} from './project-tabs-model';
-import { RichLayerInspector } from './RichLayerInspector';
-import { WorkspaceHome } from './WorkspaceHome';
-import { WorkspacePersistencePanel } from './WorkspacePersistencePanel';
-import { useBroadcastControls } from './useBroadcastControls';
-import { useWorkspacePersistence } from './useWorkspacePersistence';
-import { retainProjectAssetLibraries } from './workspace-session-assets';
-import './canvas-controls.css';
-import './page-controls.css';
+} from "./project-tabs-model";
+import { RichLayerInspector } from "./RichLayerInspector";
+import { WorkspaceHome } from "./WorkspaceHome";
+import { WorkspacePersistencePanel } from "./WorkspacePersistencePanel";
+import { useBroadcastControls } from "./useBroadcastControls";
+import { useWorkspacePersistence } from "./useWorkspacePersistence";
+import { retainProjectAssetLibraries } from "./workspace-session-assets";
+import "./canvas-controls.css";
+import "./page-controls.css";
 
 const initialCommandState = createCanvasWorkspaceCommandState(
-  createEmptyWorkspace('local-workspace'),
+  createEmptyWorkspace("local-workspace"),
 );
 
 const DEFAULT_BRUSH: BrushSettings = {
-  color: '#FF3366',
+  color: "#FF3366",
   size: 24,
   opacity: 1,
   hardness: 0.9,
@@ -125,38 +125,46 @@ const DEFAULT_SNAP: SnapSettings = {
 };
 
 const DRAWING_TOOLS: Array<{ id: CanvasToolId; label: string }> = [
-  { id: 'pen', label: 'ペン' },
-  { id: 'eraser', label: '消しゴム' },
-  { id: 'bucket', label: 'バケツ' },
-  { id: 'eyedropper', label: 'スポイト' },
-  { id: 'pan', label: '手のひら' },
+  { id: "pen", label: "ペン" },
+  { id: "eraser", label: "消しゴム" },
+  { id: "bucket", label: "バケツ" },
+  { id: "eyedropper", label: "スポイト" },
+  { id: "pan", label: "手のひら" },
 ];
 
 const SELECTION_TOOLS: Array<{ id: SelectionMode; label: string }> = [
-  { id: 'rectangle', label: '矩形選択' },
-  { id: 'ellipse', label: '楕円選択' },
-  { id: 'lasso', label: '投げ縄選択' },
+  { id: "rectangle", label: "矩形選択" },
+  { id: "ellipse", label: "楕円選択" },
+  { id: "lasso", label: "投げ縄選択" },
 ];
 
-type CopyStatus = 'idle' | 'copied' | 'error';
-type ApplicationSurface = 'home' | 'editor';
+type CopyStatus = "idle" | "copied" | "error";
+type ApplicationSurface = "home" | "editor";
 
-const E2E_START_SURFACE_KEY = 'live-board:e2e-start-surface';
+const E2E_START_SURFACE_KEY = "live-board:e2e-start-surface";
 
 export function AppV2() {
   const runtime = window.liveBoard?.getRuntimeInfo();
   const [commandState, setCommandState] = useState(initialCommandState);
-  const [assetLibraries, setAssetLibraries] = useState<Record<string, ProjectAssetLibrary>>({});
+  const [assetLibraries, setAssetLibraries] = useState<
+    Record<string, ProjectAssetLibrary>
+  >({});
   const [assetError, setAssetError] = useState<string | null>(null);
   const [domainError, setDomainError] = useState<string | null>(null);
-  const [securityStatus, setSecurityStatus] = useState<SecurityStatus | null>(null);
+  const [securityStatus, setSecurityStatus] = useState<SecurityStatus | null>(
+    null,
+  );
   const [securityStatusError, setSecurityStatusError] = useState(false);
-  const [broadcastRevision, setBroadcastRevision] = useState<number | null>(null);
+  const [broadcastRevision, setBroadcastRevision] = useState<number | null>(
+    null,
+  );
   const [broadcastSyncError, setBroadcastSyncError] = useState(false);
-  const [copyStatus, setCopyStatus] = useState<CopyStatus>('idle');
-  const [surface, setSurface] = useState<ApplicationSurface>(initialApplicationSurface);
+  const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
+  const [surface, setSurface] = useState<ApplicationSurface>(
+    initialApplicationSurface,
+  );
   const [hasEditorSession, setHasEditorSession] = useState(
-    initialApplicationSurface() === 'editor',
+    initialApplicationSurface() === "editor",
   );
   const [projectTabsState, setProjectTabsState] = useState(() =>
     createProjectTabsState(
@@ -164,15 +172,21 @@ export function AppV2() {
       initialCommandState.workspace.projects.map((project) => project.id),
     ),
   );
-  const [toolId, setToolId] = useState<CanvasToolId>('pen');
-  const [selectionMode, setSelectionMode] = useState<SelectionMode | null>(null);
+  const [toolId, setToolId] = useState<CanvasToolId>("pen");
+  const [selectionMode, setSelectionMode] = useState<SelectionMode | null>(
+    null,
+  );
   const [selection, setSelection] = useState<CanvasSelection | null>(null);
   const [brush, setBrush] = useState<BrushSettings>(DEFAULT_BRUSH);
-  const [viewport, setViewport] = useState<CanvasViewport>(DEFAULT_CANVAS_VIEWPORT);
+  const [viewport, setViewport] = useState<CanvasViewport>(
+    DEFAULT_CANVAS_VIEWPORT,
+  );
   const [snap, setSnap] = useState<SnapSettings>(DEFAULT_SNAP);
   const [gridVisible, setGridVisible] = useState(false);
   const [guidesVisible, setGuidesVisible] = useState(true);
-  const [renderMetrics, setRenderMetrics] = useState<RenderMetrics | null>(null);
+  const [renderMetrics, setRenderMetrics] = useState<RenderMetrics | null>(
+    null,
+  );
   const nextBroadcastRevisionRef = useRef(1);
   const registeredBroadcastAssetHashesRef = useRef(new Set<string>());
   const persistence = useWorkspacePersistence({
@@ -184,8 +198,9 @@ export function AppV2() {
 
   const workspace = commandState.workspace;
   const project =
-    workspace.projects.find((candidate) => candidate.id === workspace.activeProjectId) ??
-    workspace.projects[0]!;
+    workspace.projects.find(
+      (candidate) => candidate.id === workspace.activeProjectId,
+    ) ?? workspace.projects[0]!;
   const projectIds = workspace.projects.map((candidate) => candidate.id);
   const currentProjectTabsState = synchronizeProjectTabsState(
     projectTabsState,
@@ -194,45 +209,55 @@ export function AppV2() {
     project.id,
     persistence.workspaceSessionRevision,
   );
-  const retainedAssetProjectIds = getWorkspaceHistoryRetainedProjectIds(commandState);
-  const retainedAssetProjectIdsSignature = retainedAssetProjectIds.join('|');
-  const workspaceFutureHistorySignature = commandState.histories.workspace.future
-    .map((entry) => entry.historyId)
-    .join('|');
+  const retainedAssetProjectIds =
+    getWorkspaceHistoryRetainedProjectIds(commandState);
+  const retainedAssetProjectIdsSignature = retainedAssetProjectIds.join("|");
+  const workspaceFutureHistorySignature =
+    commandState.histories.workspace.future
+      .map((entry) => entry.historyId)
+      .join("|");
   const assetLibraryBytesSignature = Object.entries(assetLibraries)
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([projectId, library]) => `${projectId}:${library.totalBytes}`)
-    .join('|');
+    .join("|");
   const broadcastControls = useBroadcastControls({
     commandState,
     setCommandState,
     projectId: project.id,
-    enabled: surface === 'editor',
+    enabled: surface === "editor",
   });
   const editPage =
-    project.pages.find((candidate) => candidate.id === project.activeEditPageId) ??
-    project.pages[0]!;
+    project.pages.find(
+      (candidate) => candidate.id === project.activeEditPageId,
+    ) ?? project.pages[0]!;
   const broadcastPage =
-    project.pages.find((candidate) => candidate.id === project.activeBroadcastPageId) ??
-    project.pages[0]!;
-  const assetLibrary = assetLibraries[project.id] ?? createProjectAssetLibrary();
-  const editPageIndex = project.pages.findIndex((page) => page.id === editPage.id);
+    project.pages.find(
+      (candidate) => candidate.id === project.activeBroadcastPageId,
+    ) ?? project.pages[0]!;
+  const assetLibrary =
+    assetLibraries[project.id] ?? createProjectAssetLibrary();
+  const editPageIndex = project.pages.findIndex(
+    (page) => page.id === editPage.id,
+  );
   const projectHistory = getProjectHistory(commandState, project.id);
   const canvasHistory = getCanvasHistory(commandState, editPage.id);
   const editLayerSignature = JSON.stringify(getLayerDocument(editPage));
-  const broadcastLayerSignature = JSON.stringify(getLayerDocument(broadcastPage));
+  const broadcastLayerSignature = JSON.stringify(
+    getLayerDocument(broadcastPage),
+  );
   const broadcastSettingsSignature = JSON.stringify(broadcastControls.settings);
   const assetSignature = `${assetLibrary.totalBytes}:${assetLibrary.assets
     .map((asset) => `${asset.id}:${asset.sha256}`)
-    .join('|')}`;
+    .join("|")}`;
   const editSnapshot = useMemo(
-    () => createPageRenderSnapshot(
-      editPage,
-      project.id,
-      0,
-      new Date().toISOString(),
-      assetLibrary,
-    ),
+    () =>
+      createPageRenderSnapshot(
+        editPage,
+        project.id,
+        0,
+        new Date().toISOString(),
+        assetLibrary,
+      ),
     [
       editPage.id,
       editPage.name,
@@ -303,10 +328,11 @@ export function AppV2() {
   useEffect(() => {
     const liveBoardApi = window.liveBoard;
     if (
-      surface !== 'editor' ||
+      surface !== "editor" ||
       liveBoardApi === undefined ||
       securityStatus === null
-    ) return;
+    )
+      return;
     let active = true;
     const revision = nextBroadcastRevisionRef.current;
     nextBroadcastRevisionRef.current += 1;
@@ -367,11 +393,11 @@ export function AppV2() {
 
   const handleToolResult = useCallback(
     (result: Exclude<CanvasToolResult, null>) => {
-      if (result.type === 'color') {
+      if (result.type === "color") {
         setBrush((current) => ({ ...current, color: result.color }));
         return;
       }
-      if (result.type === 'pan') return;
+      if (result.type === "pan") return;
       try {
         setCommandState((current) =>
           applyDrawingResult(current, project.id, editPage.id, result),
@@ -379,7 +405,7 @@ export function AppV2() {
         setDomainError(null);
       } catch (error: unknown) {
         setDomainError(
-          error instanceof Error ? error.message : '描画操作に失敗しました',
+          error instanceof Error ? error.message : "描画操作に失敗しました",
         );
       }
     },
@@ -387,18 +413,18 @@ export function AppV2() {
   );
 
   const obsBridgeLabel = securityStatusError
-    ? 'OBSブリッジ: 起動確認失敗'
+    ? "OBSブリッジ: 起動確認失敗"
     : securityStatus === null
       ? runtime === undefined
-        ? 'OBSブリッジ: Browser Preview'
-        : 'OBSブリッジ: 起動確認中'
+        ? "OBSブリッジ: Browser Preview"
+        : "OBSブリッジ: 起動確認中"
       : `OBSブリッジ: ${securityStatus.obsBridge.host}:${securityStatus.obsBridge.port}`;
   const broadcastSyncLabel = broadcastSyncError
-    ? 'OBS同期: 再同期中'
+    ? "OBS同期: 再同期中"
     : broadcastRevision === null
       ? runtime === undefined
-        ? 'OBS同期: Browser Preview'
-        : 'OBS同期: 初期化中'
+        ? "OBS同期: Browser Preview"
+        : "OBS同期: 初期化中"
       : `OBS同期: revision ${broadcastRevision}`;
 
   function executeCommand(command: ProjectCommand): void {
@@ -409,23 +435,21 @@ export function AppV2() {
       setDomainError(null);
     } catch (error: unknown) {
       setDomainError(
-        error instanceof DomainError ? error.message : 'ページ操作に失敗しました',
+        error instanceof DomainError
+          ? error.message
+          : "ページ操作に失敗しました",
       );
     }
   }
 
   function addPage(): void {
     const page = createPage({
-      id: createEntityId('page'),
+      id: createEntityId("page"),
       projectId: project.id,
       name: `ページ ${project.pages.length + 1}`,
     });
     executeCommand(
-      createAddPageCommand(
-        project.id,
-        page,
-        createCommandMetadata('page-add'),
-      ),
+      createAddPageCommand(project.id, page, createCommandMetadata("page-add")),
     );
   }
 
@@ -437,7 +461,7 @@ export function AppV2() {
           createSelectProjectCommand(
             current.workspace.id,
             projectId,
-            createCommandMetadata('project-select'),
+            createCommandMetadata("project-select"),
           ),
         ),
       );
@@ -448,18 +472,20 @@ export function AppV2() {
       setDomainError(null);
     } catch (error: unknown) {
       setDomainError(
-        error instanceof DomainError ? error.message : 'Projectの切り替えに失敗しました',
+        error instanceof DomainError
+          ? error.message
+          : "Projectの切り替えに失敗しました",
       );
     }
   }
 
   function createProjectTab(): void {
     const timestamp = new Date().toISOString();
-    const projectId = createEntityId('project');
+    const projectId = createEntityId("project");
     const page = createPage({
-      id: createEntityId('page'),
+      id: createEntityId("page"),
       projectId,
-      name: 'ページ 1',
+      name: "ページ 1",
       createdAt: timestamp,
       updatedAt: timestamp,
     });
@@ -479,7 +505,7 @@ export function AppV2() {
           createAddProjectCommand(
             current.workspace.id,
             nextProject,
-            createCommandMetadata('project-add'),
+            createCommandMetadata("project-add"),
           ),
         ),
       );
@@ -490,34 +516,40 @@ export function AppV2() {
       setDomainError(null);
     } catch (error: unknown) {
       setDomainError(
-        error instanceof DomainError ? error.message : 'Projectの追加に失敗しました',
+        error instanceof DomainError
+          ? error.message
+          : "Projectの追加に失敗しました",
       );
     }
   }
 
   function renameProject(projectId: string, name: string): void {
-  try {
-    setCommandState((current) =>
-      dispatchWorkspaceCommandWithCanvasHistory(
-        current,
-        createRenameProjectCommand(
-          current.workspace.id,
-          projectId,
-          name,
-          createCommandMetadata('project-rename'),
+    try {
+      setCommandState((current) =>
+        dispatchWorkspaceCommandWithCanvasHistory(
+          current,
+          createRenameProjectCommand(
+            current.workspace.id,
+            projectId,
+            name,
+            createCommandMetadata("project-rename"),
+          ),
         ),
-      ),
-    );
-    setDomainError(null);
-  } catch (error: unknown) {
-    setDomainError(
-      error instanceof DomainError ? error.message : 'Project名の変更に失敗しました',
-    );
+      );
+      setDomainError(null);
+    } catch (error: unknown) {
+      setDomainError(
+        error instanceof DomainError
+          ? error.message
+          : "Project名の変更に失敗しました",
+      );
+    }
   }
-}
 
-function undoProjectOperation(): void {
-    setCommandState((current) => undoWorkspaceCommandWithCanvasHistory(current));
+  function undoProjectOperation(): void {
+    setCommandState((current) =>
+      undoWorkspaceCommandWithCanvasHistory(current),
+    );
     setSelection(null);
     setSelectionMode(null);
     setViewport(DEFAULT_CANVAS_VIEWPORT);
@@ -525,7 +557,9 @@ function undoProjectOperation(): void {
   }
 
   function redoProjectOperation(): void {
-    setCommandState((current) => redoWorkspaceCommandWithCanvasHistory(current));
+    setCommandState((current) =>
+      redoWorkspaceCommandWithCanvasHistory(current),
+    );
     setSelection(null);
     setSelectionMode(null);
     setViewport(DEFAULT_CANVAS_VIEWPORT);
@@ -534,7 +568,7 @@ function undoProjectOperation(): void {
 
   function duplicateEditPage(): void {
     const timestamp = new Date().toISOString();
-    const pageId = createEntityId('page');
+    const pageId = createEntityId("page");
     const duplicatedPage: Page = {
       ...createPage({
         ...editPage,
@@ -550,7 +584,7 @@ function undoProjectOperation(): void {
         project.id,
         editPage.id,
         duplicatedPage,
-        createCommandMetadata('page-duplicate'),
+        createCommandMetadata("page-duplicate"),
       ),
     );
   }
@@ -559,21 +593,23 @@ function undoProjectOperation(): void {
     const liveBoardApi = window.liveBoard;
     if (liveBoardApi === undefined) return;
     const requestId = globalThis.crypto.randomUUID();
-    setCopyStatus('idle');
+    setCopyStatus("idle");
     void liveBoardApi
       .copyObsSourceUrl(requestId)
       .then((response) => {
         setCopyStatus(
-          response.requestId === requestId && response.copied ? 'copied' : 'error',
+          response.requestId === requestId && response.copied
+            ? "copied"
+            : "error",
         );
       })
-      .catch(() => setCopyStatus('error'));
+      .catch(() => setCopyStatus("error"));
   }
 
   function clearRaster(): void {
     const activeLayerId = getLayerDocument(editPage).activeLayerId;
     if (activeLayerId === null) {
-      setDomainError('消去するラスターLayerを選択してください');
+      setDomainError("消去するラスターLayerを選択してください");
       return;
     }
     try {
@@ -584,14 +620,14 @@ function undoProjectOperation(): void {
             project.id,
             editPage.id,
             activeLayerId,
-            createCommandMetadata('raster-clear'),
+            createCommandMetadata("raster-clear"),
           ),
         ),
       );
       setDomainError(null);
     } catch (error: unknown) {
       setDomainError(
-        error instanceof Error ? error.message : '全消去に失敗しました',
+        error instanceof Error ? error.message : "全消去に失敗しました",
       );
     }
   }
@@ -618,7 +654,7 @@ function undoProjectOperation(): void {
       setAssetError(
         error instanceof AssetValidationError || error instanceof Error
           ? error.message
-          : '画像の取り込みに失敗しました',
+          : "画像の取り込みに失敗しました",
       );
     }
   }
@@ -636,34 +672,37 @@ function undoProjectOperation(): void {
   function enterEditor(): void {
     resetEditorPresentation();
     setHasEditorSession(true);
-    setSurface('editor');
+    setSurface("editor");
   }
 
   function confirmWorkspaceReplacement(actionLabel: string): boolean {
     if (!hasEditorSession || !persistence.hasUnsavedChanges) return true;
     return window.confirm(
-      '未保存の編集セッションを保持しています。' + actionLabel + 'と現在の内容は置き換わります。続行しますか？',
+      "未保存の編集セッションを保持しています。" +
+        actionLabel +
+        "と現在の内容は置き換わります。続行しますか？",
     );
   }
 
   function createWorkspaceFromHome(): void {
-    if (!confirmWorkspaceReplacement('新しいワークスペースを作成する')) return;
+    if (!confirmWorkspaceReplacement("新しいワークスペースを作成する")) return;
     persistence.createNew();
     enterEditor();
   }
 
   async function openWorkspaceFromHome(): Promise<void> {
-    if (!confirmWorkspaceReplacement('ファイルを開く')) return;
+    if (!confirmWorkspaceReplacement("ファイルを開く")) return;
     if (await persistence.open()) enterEditor();
   }
 
   async function openRecentFromHome(documentId: string): Promise<void> {
-    if (!confirmWorkspaceReplacement('最近使用したワークスペースを開く')) return;
+    if (!confirmWorkspaceReplacement("最近使用したワークスペースを開く"))
+      return;
     if (await persistence.openRecent(documentId)) enterEditor();
   }
 
   async function restoreFromHome(candidateId: string): Promise<void> {
-    if (!confirmWorkspaceReplacement('クラッシュ復元を実行する')) return;
+    if (!confirmWorkspaceReplacement("クラッシュ復元を実行する")) return;
     if (await persistence.restore(candidateId)) enterEditor();
   }
 
@@ -671,25 +710,25 @@ function undoProjectOperation(): void {
     if (
       persistence.hasUnsavedChanges &&
       !window.confirm(
-        '未保存の変更は破棄せずメモリ上に保持したままホームへ戻ります。続行しますか？',
+        "未保存の変更は破棄せずメモリ上に保持したままホームへ戻ります。続行しますか？",
       )
     ) {
       return;
     }
-    setSurface('home');
+    setSurface("home");
   }
 
   const layerPanelSetter = setCommandState as unknown as Dispatch<
     SetStateAction<LayerWorkspaceCommandState>
   >;
 
-  if (surface === 'home') {
+  if (surface === "home") {
     return (
       <WorkspaceHome
         controller={persistence}
         currentWorkspaceName={workspace.name}
         hasEditorSession={hasEditorSession}
-        onContinueEditing={() => setSurface('editor')}
+        onContinueEditing={() => setSurface("editor")}
         onCreateNew={createWorkspaceFromHome}
         onOpen={openWorkspaceFromHome}
         onOpenRecent={openRecentFromHome}
@@ -706,7 +745,9 @@ function undoProjectOperation(): void {
           <p>{workspace.name}</p>
         </div>
         <div className="topbar-actions">
-          <button type="button" onClick={returnToHome}>ホーム</button>
+          <button type="button" onClick={returnToHome}>
+            ホーム
+          </button>
           <span className="status-dot" aria-hidden="true" />
           <span>{obsBridgeLabel}</span>
           <span>{broadcastSyncLabel}</span>
@@ -715,18 +756,20 @@ function undoProjectOperation(): void {
             disabled={window.liveBoard === undefined}
             onClick={copyObsSourceUrl}
           >
-            {copyStatus === 'copied'
-              ? 'OBS URLコピー済み'
-              : copyStatus === 'error'
-                ? 'OBS URLコピー失敗'
-                : 'OBS URLをコピー'}
+            {copyStatus === "copied"
+              ? "OBS URLコピー済み"
+              : copyStatus === "error"
+                ? "OBS URLコピー失敗"
+                : "OBS URLをコピー"}
           </button>
           <button
             type="button"
-            disabled={broadcastControls.locked || editPage.id === broadcastPage.id}
+            disabled={
+              broadcastControls.locked || editPage.id === broadcastPage.id
+            }
             onClick={() => broadcastControls.selectPage(editPage.id)}
           >
-            {broadcastControls.locked ? '配信ページ固定中' : '配信ページに設定'}
+            {broadcastControls.locked ? "配信ページ固定中" : "配信ページに設定"}
           </button>
         </div>
       </header>
@@ -736,7 +779,11 @@ function undoProjectOperation(): void {
           <button
             key={tool.id}
             type="button"
-            className={selectionMode === null && toolId === tool.id ? 'active' : undefined}
+            className={
+              selectionMode === null && toolId === tool.id
+                ? "active"
+                : undefined
+            }
             aria-pressed={selectionMode === null && toolId === tool.id}
             onClick={() => {
               setToolId(tool.id);
@@ -750,7 +797,7 @@ function undoProjectOperation(): void {
           <button
             key={tool.id}
             type="button"
-            className={selectionMode === tool.id ? 'active' : undefined}
+            className={selectionMode === tool.id ? "active" : undefined}
             aria-pressed={selectionMode === tool.id}
             onClick={() => {
               setSelectionMode(tool.id);
@@ -828,7 +875,10 @@ function undoProjectOperation(): void {
             max={100}
             value={Math.round(brush.smoothing * 100)}
             onChange={(smoothing) =>
-              setBrush((current) => ({ ...current, smoothing: smoothing / 100 }))
+              setBrush((current) => ({
+                ...current,
+                smoothing: smoothing / 100,
+              }))
             }
           />
           <label>
@@ -857,7 +907,9 @@ function undoProjectOperation(): void {
             />
             筆圧で濃度
           </label>
-          <button type="button" onClick={clearRaster}>Layer全消去</button>
+          <button type="button" onClick={clearRaster}>
+            Layer全消去
+          </button>
         </div>
 
         <div className="viewport-toolbar" aria-label="キャンバス表示設定">
@@ -915,7 +967,10 @@ function undoProjectOperation(): void {
           >
             左右反転
           </button>
-          <button type="button" onClick={() => setViewport(DEFAULT_CANVAS_VIEWPORT)}>
+          <button
+            type="button"
+            onClick={() => setViewport(DEFAULT_CANVAS_VIEWPORT)}
+          >
             表示リセット
           </button>
           <label>
@@ -930,7 +985,9 @@ function undoProjectOperation(): void {
             <input
               type="checkbox"
               checked={guidesVisible}
-              onChange={(event) => setGuidesVisible(event.currentTarget.checked)}
+              onChange={(event) =>
+                setGuidesVisible(event.currentTarget.checked)
+              }
             />
             ガイド
           </label>
@@ -972,25 +1029,32 @@ function undoProjectOperation(): void {
           <span>編集: {editPage.name}</span>
           <span>配信: {broadcastPage.name}</span>
           <span>
-            Page履歴: {projectHistory.past.length} / Redo {projectHistory.future.length}
+            Page履歴: {projectHistory.past.length} / Redo{" "}
+            {projectHistory.future.length}
           </span>
           <span>
-            描画履歴: {canvasHistory.past.length} / Redo {canvasHistory.future.length}
+            描画履歴: {canvasHistory.past.length} / Redo{" "}
+            {canvasHistory.future.length}
           </span>
           <span>
-            履歴メモリ: {formatBytes(getCanvasHistoryBytes(commandState, editPage.id))}
+            履歴メモリ:{" "}
+            {formatBytes(getCanvasHistoryBytes(commandState, editPage.id))}
           </span>
           <span>
-            描画: {renderMetrics === null
-              ? '待機中'
+            描画:{" "}
+            {renderMetrics === null
+              ? "待機中"
               : `${renderMetrics.durationMs.toFixed(1)}ms / cache ${renderMetrics.cacheHits}:${renderMetrics.cacheMisses}`}
           </span>
-          <span>Asset: {assetLibrary.assets.length}件 / {formatBytes(assetLibrary.totalBytes)}</span>
+          <span>
+            Asset: {assetLibrary.assets.length}件 /{" "}
+            {formatBytes(assetLibrary.totalBytes)}
+          </span>
           <span>{broadcastSyncLabel}</span>
           <span>
             {runtime
               ? `${runtime.platform} / Electron ${runtime.versions.electron}`
-              : 'Browser Preview'}
+              : "Browser Preview"}
           </span>
         </footer>
       </main>
@@ -1037,7 +1101,7 @@ function undoProjectOperation(): void {
         <WorkspacePersistencePanel controller={persistence} />
 
         <p className="domain-message" role="status" aria-live="polite">
-          {domainError ?? 'Page・Layer・描画操作は別々の履歴へ記録されます'}
+          {domainError ?? "Page・Layer・描画操作は別々の履歴へ記録されます"}
         </p>
       </aside>
     </div>
@@ -1046,7 +1110,7 @@ function undoProjectOperation(): void {
 
 interface PagePanelProps {
   state: CanvasWorkspaceCommandState;
-  project: CanvasWorkspaceCommandState['workspace']['projects'][number];
+  project: CanvasWorkspaceCommandState["workspace"]["projects"][number];
   editPage: Page;
   editPageIndex: number;
   addPage(): void;
@@ -1073,14 +1137,18 @@ function PagePanel({
     <section>
       <div className="panel-heading">
         <h2>ページ</h2>
-        <button type="button" aria-label="ページを追加" onClick={addPage}>＋</button>
+        <button type="button" aria-label="ページを追加" onClick={addPage}>
+          ＋
+        </button>
       </div>
       <div className="history-actions" aria-label="ページ操作履歴">
         <button
           type="button"
           disabled={!canUndoProject(state, project.id)}
           onClick={() => {
-            setState((current) => undoProjectCommandWithCanvasHistory(current, project.id));
+            setState((current) =>
+              undoProjectCommandWithCanvasHistory(current, project.id),
+            );
             clearError();
           }}
         >
@@ -1090,7 +1158,9 @@ function PagePanel({
           type="button"
           disabled={!canRedoProject(state, project.id)}
           onClick={() => {
-            setState((current) => redoProjectCommandWithCanvasHistory(current, project.id));
+            setState((current) =>
+              redoProjectCommandWithCanvasHistory(current, project.id),
+            );
             clearError();
           }}
         >
@@ -1102,7 +1172,9 @@ function PagePanel({
           type="button"
           disabled={!canUndoCanvas(state, editPage.id)}
           onClick={() =>
-            setState((current) => undoCanvasCommand(current, project.id, editPage.id))
+            setState((current) =>
+              undoCanvasCommand(current, project.id, editPage.id),
+            )
           }
         >
           描画を元に戻す
@@ -1111,7 +1183,9 @@ function PagePanel({
           type="button"
           disabled={!canRedoCanvas(state, editPage.id)}
           onClick={() =>
-            setState((current) => redoCanvasCommand(current, project.id, editPage.id))
+            setState((current) =>
+              redoCanvasCommand(current, project.id, editPage.id),
+            )
           }
         >
           描画をやり直す
@@ -1125,14 +1199,14 @@ function PagePanel({
             <button
               key={page.id}
               type="button"
-              className={`page-row${isEditPage ? ' active' : ''}`}
+              className={`page-row${isEditPage ? " active" : ""}`}
               aria-pressed={isEditPage}
               onClick={() =>
                 executeCommand(
                   createSelectEditPageCommand(
                     project.id,
                     page.id,
-                    createCommandMetadata('page-select'),
+                    createCommandMetadata("page-select"),
                   ),
                 )
               }
@@ -1146,9 +1220,11 @@ function PagePanel({
                 <strong>{page.name}</strong>
                 <small>
                   {[
-                    isEditPage ? '編集中' : null,
-                    isBroadcastPage ? '配信中' : null,
-                  ].filter(Boolean).join('・') || '待機中'}
+                    isEditPage ? "編集中" : null,
+                    isBroadcastPage ? "配信中" : null,
+                  ]
+                    .filter(Boolean)
+                    .join("・") || "待機中"}
                 </small>
               </span>
             </button>
@@ -1156,7 +1232,9 @@ function PagePanel({
         })}
       </div>
       <div className="page-actions" aria-label="選択ページの操作">
-        <button type="button" onClick={duplicateEditPage}>複製</button>
+        <button type="button" onClick={duplicateEditPage}>
+          複製
+        </button>
         <button
           type="button"
           disabled={editPageIndex <= 0}
@@ -1166,7 +1244,7 @@ function PagePanel({
                 project.id,
                 editPage.id,
                 editPageIndex - 1,
-                createCommandMetadata('page-move-up'),
+                createCommandMetadata("page-move-up"),
               ),
             )
           }
@@ -1182,7 +1260,7 @@ function PagePanel({
                 project.id,
                 editPage.id,
                 editPageIndex + 1,
-                createCommandMetadata('page-move-down'),
+                createCommandMetadata("page-move-down"),
               ),
             )
           }
@@ -1197,7 +1275,7 @@ function PagePanel({
               createDeletePageCommand(
                 project.id,
                 editPage.id,
-                createCommandMetadata('page-delete'),
+                createCommandMetadata("page-delete"),
               ),
             )
           }
@@ -1247,16 +1325,19 @@ function addImageLayers(
 ): CanvasWorkspaceCommandState {
   let nextState = state;
   for (const asset of assets) {
-    const project = nextState.workspace.projects.find((candidate) => candidate.id === projectId);
+    const project = nextState.workspace.projects.find(
+      (candidate) => candidate.id === projectId,
+    );
     const page = project?.pages.find((candidate) => candidate.id === pageId);
-    if (project === undefined || page === undefined) throw new Error('画像追加先が見つかりません');
+    if (project === undefined || page === undefined)
+      throw new Error("画像追加先が見つかりません");
     const document = getLayerDocument(page);
-    const layerId = createEntityId('layer-image');
+    const layerId = createEntityId("layer-image");
     const base = createLayer({
       id: layerId,
       pageId,
-      name: asset.fileNames[0] ?? '画像',
-      type: 'image',
+      name: asset.fileNames[0] ?? "画像",
+      type: "image",
       content: {
         assetId: asset.id,
         width: asset.width,
@@ -1279,7 +1360,7 @@ function addImageLayers(
         imageLayer,
         null,
         document.rootLayerIds.length,
-        createCommandMetadata('image-layer-add'),
+        createCommandMetadata("image-layer-add"),
       ),
     );
     const scale = Math.min(
@@ -1300,7 +1381,7 @@ function addImageLayers(
           scaleY: scale,
           rotation: 0,
         },
-        createCommandMetadata('image-layer-place'),
+        createCommandMetadata("image-layer-place"),
       ),
     );
   }
@@ -1311,26 +1392,32 @@ function applyDrawingResult(
   state: CanvasWorkspaceCommandState,
   projectId: string,
   pageId: string,
-  result: Extract<Exclude<CanvasToolResult, null>, { type: 'stroke' | 'fill' }>,
+  result: Extract<Exclude<CanvasToolResult, null>, { type: "stroke" | "fill" }>,
 ): CanvasWorkspaceCommandState {
-  const project = state.workspace.projects.find((candidate) => candidate.id === projectId);
+  const project = state.workspace.projects.find(
+    (candidate) => candidate.id === projectId,
+  );
   const page = project?.pages.find((candidate) => candidate.id === pageId);
-  if (project === undefined || page === undefined) throw new Error('描画ページが見つかりません');
+  if (project === undefined || page === undefined)
+    throw new Error("描画ページが見つかりません");
   const document = getLayerDocument(page);
-  const activeLayer = document.activeLayerId === null
-    ? null
-    : document.layers.find((layer) => layer.id === document.activeLayerId) ?? null;
+  const activeLayer =
+    document.activeLayerId === null
+      ? null
+      : (document.layers.find((layer) => layer.id === document.activeLayerId) ??
+        null);
   let nextState = state;
-  let layerId = activeLayer?.type === 'raster' && !activeLayer.editLocked
-    ? activeLayer.id
-    : null;
+  let layerId =
+    activeLayer?.type === "raster" && !activeLayer.editLocked
+      ? activeLayer.id
+      : null;
   if (layerId === null) {
-    layerId = createEntityId('layer-raster');
+    layerId = createEntityId("layer-raster");
     const layer = createLayer({
       id: layerId,
       pageId,
       name: `描画 ${document.layers.length + 1}`,
-      type: 'raster',
+      type: "raster",
     });
     nextState = dispatchLayerCommandWithCanvasHistory(
       nextState,
@@ -1340,25 +1427,26 @@ function applyDrawingResult(
         layer,
         null,
         document.rootLayerIds.length,
-        createCommandMetadata('auto-raster-add'),
+        createCommandMetadata("auto-raster-add"),
       ),
     );
   }
-  const command = result.type === 'stroke'
-    ? createAddRasterStrokeCommand(
-        projectId,
-        pageId,
-        layerId,
-        result.stroke,
-        createCommandMetadata('stroke-add'),
-      )
-    : createAddRasterFillCommand(
-        projectId,
-        pageId,
-        layerId,
-        result.fill,
-        createCommandMetadata('fill-add'),
-      );
+  const command =
+    result.type === "stroke"
+      ? createAddRasterStrokeCommand(
+          projectId,
+          pageId,
+          layerId,
+          result.stroke,
+          createCommandMetadata("stroke-add"),
+        )
+      : createAddRasterFillCommand(
+          projectId,
+          pageId,
+          layerId,
+          result.fill,
+          createCommandMetadata("fill-add"),
+        );
   return dispatchCanvasCommand(nextState, command);
 }
 
@@ -1369,7 +1457,7 @@ function duplicateLayerDocument(
 ): LayerDocument {
   const source = getLayerDocument(sourcePage);
   const idMap = new Map(
-    source.layers.map((layer) => [layer.id, createEntityId('layer')]),
+    source.layers.map((layer) => [layer.id, createEntityId("layer")]),
   );
   const layers = source.layers.map((layer) => {
     const copy = cloneLayer({
@@ -1380,7 +1468,7 @@ function duplicateLayerDocument(
       createdAt: timestamp,
       updatedAt: timestamp,
     } as Layer);
-    if (copy.type === 'folder') {
+    if (copy.type === "folder") {
       copy.childLayerIds = copy.childLayerIds.map((id) => idMap.get(id)!);
     }
     return copy;
@@ -1395,11 +1483,11 @@ function duplicateLayerDocument(
 
 function initialApplicationSurface(): ApplicationSurface {
   try {
-    return window.localStorage.getItem(E2E_START_SURFACE_KEY) === 'editor'
-      ? 'editor'
-      : 'home';
+    return window.localStorage.getItem(E2E_START_SURFACE_KEY) === "editor"
+      ? "editor"
+      : "home";
   } catch {
-    return 'home';
+    return "home";
   }
 }
 

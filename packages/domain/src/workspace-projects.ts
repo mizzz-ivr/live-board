@@ -8,7 +8,7 @@ import {
   type Project,
   type ProjectId,
   type Workspace,
-} from './model.js';
+} from "./model.js";
 
 export function appendWorkspaceProject(
   workspace: Workspace,
@@ -17,13 +17,13 @@ export function appendWorkspaceProject(
 ): Workspace {
   if (project.workspaceId !== workspace.id) {
     throw new DomainError(
-      'PROJECT_NOT_FOUND',
+      "PROJECT_NOT_FOUND",
       `Project ${project.id} does not belong to workspace ${workspace.id}`,
     );
   }
   if (workspace.projects.some((candidate) => candidate.id === project.id)) {
     throw new DomainError(
-      'DUPLICATE_PROJECT_ID',
+      "DUPLICATE_PROJECT_ID",
       `Duplicate project id: ${project.id}`,
     );
   }
@@ -54,7 +54,6 @@ export function selectWorkspaceProject(
   assertWorkspaceIntegrity(nextWorkspace);
   return nextWorkspace;
 }
-
 
 export function renameWorkspaceProject(
   workspace: Workspace,
