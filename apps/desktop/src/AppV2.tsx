@@ -19,6 +19,7 @@ import {
   canUndoProject,
   canUndoWorkspace,
   cloneLayer,
+  cloneProjectAssetLibrary,
   createAddLayerCommand,
   createAddPageCommand,
   createAddProjectCommand,
@@ -43,6 +44,8 @@ import {
   dispatchLayerCommandWithCanvasHistory,
   dispatchProjectCommandWithCanvasHistory,
   dispatchWorkspaceCommandWithCanvasHistory,
+  duplicateProject,
+  findProject,
   getCanvasHistory,
   getCanvasHistoryBytes,
   getLayerDocument,
@@ -495,6 +498,49 @@ export function AppV2() {
     }
   }
 
+  function duplicateProjectTab(projectId: string): void {
+    const timestamp = new Date().toISOString();
+    try {
+      const sourceProject = findProject(commandState.workspace, projectId);
+      const nextProject = duplicateProject(sourceProject, {
+        id: createEntityId('project'),
+        createdAt: timestamp,
+        createPageId: () => createEntityId('page'),
+        createLayerId: () => createEntityId('layer'),
+      });
+      const command = createAddProjectCommand(
+        commandState.workspace.id,
+        nextProject,
+        createCommandMetadata('project-duplicate'),
+      );
+      const validatedState = dispatchWorkspaceCommandWithCanvasHistory(
+        commandState,
+        command,
+      );
+      const sourceLibrary =
+        assetLibraries[projectId] ?? createProjectAssetLibrary();
+
+      setAssetLibraries((current) => ({
+        ...current,
+        [nextProject.id]: cloneProjectAssetLibrary(sourceLibrary),
+      }));
+      setCommandState((current) =>
+        current === commandState
+          ? validatedState
+          : dispatchWorkspaceCommandWithCanvasHistory(current, command),
+      );
+      setSelection(null);
+      setSelectionMode(null);
+      setViewport(DEFAULT_CANVAS_VIEWPORT);
+      setAssetError(null);
+      setDomainError(null);
+    } catch (error: unknown) {
+      setDomainError(
+        error instanceof DomainError ? error.message : 'Projectの複製に失敗しました',
+      );
+    }
+  }
+
   function renameProject(projectId: string, name: string): void {
     try {
       setCommandState((current) =>
@@ -773,6 +819,7 @@ export function AppV2() {
           onTabsChange={setProjectTabsState}
           onSelect={selectProject}
           onCreate={createProjectTab}
+          onDuplicate={duplicateProjectTab}
           onRename={renameProject}
           onUndoProjectOperation={undoProjectOperation}
           onRedoProjectOperation={redoProjectOperation}

@@ -32,6 +32,7 @@ export interface ProjectTabsProps {
   onTabsChange: Dispatch<SetStateAction<ProjectTabsState>>;
   onSelect(projectId: string): void;
   onCreate(): void;
+  onDuplicate(projectId: string): void;
   onRename(projectId: string, name: string): void;
   onUndoProjectOperation(): void;
   onRedoProjectOperation(): void;
@@ -52,6 +53,7 @@ export function ProjectTabs({
   onTabsChange,
   onSelect,
   onCreate,
+  onDuplicate,
   onRename,
   onUndoProjectOperation,
   onRedoProjectOperation,
@@ -258,6 +260,14 @@ export function ProjectTabs({
                 onClick={() => rename(project)}
               >
                 名前
+              </button>
+              <button
+                type="button"
+                className="project-tab-duplicate"
+                aria-label={`${project.name}を複製`}
+                onClick={() => onDuplicate(project.id)}
+              >
+                複製
               </button>
               <button
                 type="button"

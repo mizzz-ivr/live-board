@@ -74,7 +74,7 @@ M3「保存・復旧・性能・配信操作性」に加え、画像Asset分離�
 - schemaVersion 0→1 migrationと未知schema拒否
 - Zip Slip・symlink・暗号化・CRC／SHA改ざん拒否
 - 起動直後のWorkspaceホーム、新規作成、最近使用、お気に入り、クラッシュ復元
-- Project追加、名前変更、タブ切り替え、タブを閉じる、直近タブの復元、Workspace単位の未保存表示
+- Project追加、複製、名前変更、タブ切り替え、タブを閉じる、直近タブの復元、Workspace単位の未保存表示
 - 最近使用、お気に入り、複製、インポート
 - Alt＋左右・番号指定による配信ページ切り替え
 - 配信ページ固定と入力欄フォーカス中のショートカット抑止
@@ -133,6 +133,7 @@ RendererからNode.js APIへ直接アクセスできない構成です。
 Workspace内のProjectはEditor上部のタブで切り替えます。
 
 - 初期Page付きProjectを追加
+- ProjectをPage・Layer・Assetごと独立複製し、Project操作としてUndo / Redo
 - Project名を変更し、Project操作としてUndo / Redo
 - クリック、左右キー、Home / Endで切り替え
 - タブを閉じてもProject本体・Page・Layer・Asset・履歴は削除しない
