@@ -28,6 +28,7 @@ import {
   createCanvasWorkspaceCommandState,
   createClearRasterCommand,
   createDeletePageCommand,
+  createDeleteProjectCommand,
   createDuplicatePageCommand,
   createEmptyWorkspace,
   createLayer,
@@ -541,6 +542,37 @@ export function AppV2() {
     }
   }
 
+  function deleteProjectTab(projectId: string): void {
+    try {
+      const targetProject = findProject(commandState.workspace, projectId);
+      if (commandState.workspace.projects.length <= 1) return;
+      const confirmed = window.confirm(
+        `「${targetProject.name}」を削除します。\nこの操作はProject操作のUndoで元に戻せます。`,
+      );
+      if (!confirmed) return;
+
+      setCommandState((current) =>
+        dispatchWorkspaceCommandWithCanvasHistory(
+          current,
+          createDeleteProjectCommand(
+            current.workspace.id,
+            projectId,
+            createCommandMetadata('project-delete'),
+          ),
+        ),
+      );
+      setSelection(null);
+      setSelectionMode(null);
+      setViewport(DEFAULT_CANVAS_VIEWPORT);
+      setAssetError(null);
+      setDomainError(null);
+    } catch (error: unknown) {
+      setDomainError(
+        error instanceof DomainError ? error.message : 'Projectの削除に失敗しました',
+      );
+    }
+  }
+
   function renameProject(projectId: string, name: string): void {
     try {
       setCommandState((current) =>
@@ -820,6 +852,7 @@ export function AppV2() {
           onSelect={selectProject}
           onCreate={createProjectTab}
           onDuplicate={duplicateProjectTab}
+          onDelete={deleteProjectTab}
           onRename={renameProject}
           onUndoProjectOperation={undoProjectOperation}
           onRedoProjectOperation={redoProjectOperation}

@@ -144,6 +144,41 @@ test('Projectを複製し、Page構成とProject操作Undo・Redoを維持でき
   await expect(page.locator('.page-list .page-row')).toHaveCount(2);
 });
 
+test('Project削除を確認し、Undo・Redoで復元できる', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas-surface')).toBeVisible();
+
+  const tablist = page.getByRole('tablist', { name: 'プロジェクト' });
+  await page.getByRole('button', { name: 'プロジェクトを追加' }).click();
+  await expect(tablist.getByRole('tab')).toHaveCount(2);
+
+  page.once('dialog', async (dialog) => dialog.dismiss());
+  await page.getByRole('button', { name: 'プロジェクト 2を削除' }).click();
+  await expect(tablist.getByRole('tab')).toHaveCount(2);
+
+  page.once('dialog', async (dialog) => dialog.accept());
+  await page.getByRole('button', { name: 'プロジェクト 2を削除' }).click();
+  await expect(tablist.getByRole('tab')).toHaveCount(1);
+  await expect(
+    tablist.getByRole('tab', { name: /新しいプロジェクト/ }),
+  ).toHaveAttribute('aria-selected', 'true');
+  await expect(
+    page.getByRole('button', { name: '新しいプロジェクトを削除' }),
+  ).toBeDisabled();
+
+  await page.getByRole('button', { name: 'Project操作を元に戻す' }).click();
+  const restoredTab = tablist.getByRole('tab', { name: /プロジェクト 2/ });
+  await expect(tablist.getByRole('tab')).toHaveCount(2);
+  await expect(restoredTab).toHaveAttribute('aria-selected', 'true');
+
+  await page.getByRole('button', { name: 'Project操作をやり直す' }).click();
+  await expect(tablist.getByRole('tab')).toHaveCount(1);
+  await expect(
+    tablist.getByRole('tab', { name: /新しいプロジェクト/ }),
+  ).toHaveAttribute('aria-selected', 'true');
+});
+
+
 test('Project名を変更し、Project操作でUndo・Redoできる', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('canvas-surface')).toBeVisible();

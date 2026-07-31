@@ -33,6 +33,7 @@ export interface ProjectTabsProps {
   onSelect(projectId: string): void;
   onCreate(): void;
   onDuplicate(projectId: string): void;
+  onDelete(projectId: string): void;
   onRename(projectId: string, name: string): void;
   onUndoProjectOperation(): void;
   onRedoProjectOperation(): void;
@@ -54,6 +55,7 @@ export function ProjectTabs({
   onSelect,
   onCreate,
   onDuplicate,
+  onDelete,
   onRename,
   onUndoProjectOperation,
   onRedoProjectOperation,
@@ -268,6 +270,20 @@ export function ProjectTabs({
                 onClick={() => onDuplicate(project.id)}
               >
                 複製
+              </button>
+              <button
+                type="button"
+                className="project-tab-delete"
+                aria-label={`${project.name}を削除`}
+                title={
+                  projects.length <= 1
+                    ? 'Workspaceには1件以上のProjectが必要です'
+                    : 'Project本体を削除'
+                }
+                disabled={projects.length <= 1}
+                onClick={() => onDelete(project.id)}
+              >
+                削除
               </button>
               <button
                 type="button"

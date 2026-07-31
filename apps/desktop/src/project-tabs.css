@@ -59,6 +59,7 @@
 .project-tabs-shell .project-tab-select,
 .project-tabs-shell .project-tab-rename,
 .project-tabs-shell .project-tab-duplicate,
+.project-tabs-shell .project-tab-delete,
 .project-tabs-shell .project-tab-pin,
 .project-tabs-shell .project-tab-close,
 .project-tab-actions button {
@@ -99,6 +100,7 @@
 
 .project-tabs-shell .project-tab-rename,
 .project-tabs-shell .project-tab-duplicate,
+.project-tabs-shell .project-tab-delete,
 .project-tabs-shell .project-tab-pin,
 .project-tabs-shell .project-tab-close {
   border-left: 1px solid #374151;
@@ -108,6 +110,7 @@
 
 .project-tabs-shell .project-tab-rename,
 .project-tabs-shell .project-tab-duplicate,
+.project-tabs-shell .project-tab-delete,
 .project-tabs-shell .project-tab-pin {
   font-size: 9px;
 }
@@ -118,6 +121,7 @@
 
 .project-tabs-shell .project-tab-rename:hover,
 .project-tabs-shell .project-tab-duplicate:hover,
+.project-tabs-shell .project-tab-delete:not(:disabled):hover,
 .project-tabs-shell .project-tab-pin:hover,
 .project-tabs-shell .project-tab-close:not(:disabled):hover,
 .project-tab-actions button:not(:disabled):hover {
@@ -125,6 +129,7 @@
   color: #fff;
 }
 
+.project-tabs-shell .project-tab-delete:disabled,
 .project-tabs-shell .project-tab-close:disabled {
   cursor: not-allowed;
   opacity: 0.45;
