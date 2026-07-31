@@ -5,6 +5,7 @@ import {
   createProject,
   createProjectCopyName,
   duplicateProject,
+  getBroadcastOverlaySettings,
   getLayerDocument,
   type FolderLayer,
   type RasterLayer,
@@ -72,8 +73,7 @@ function sourceProject() {
     name: '待機画面',
     createdAt: CREATED_AT,
   });
-
-  return createProject({
+  const project = createProject({
     id: projectId,
     workspaceId: 'workspace-1',
     name: '配信用Project',
@@ -93,6 +93,10 @@ function sourceProject() {
     broadcastPageLocked: true,
     createdAt: CREATED_AT,
   });
+  return {
+    ...project,
+    broadcastSettings: getBroadcastOverlaySettings(project),
+  };
 }
 
 describe('Project複製', () => {
@@ -116,6 +120,11 @@ describe('Project複製', () => {
     expect(duplicated.activeEditPageId).toBe('page-duplicate-1');
     expect(duplicated.activeBroadcastPageId).toBe('page-duplicate-2');
     expect(duplicated.broadcastPageLocked).toBe(true);
+    expect(duplicated.broadcastSettings).toEqual(source.broadcastSettings);
+    expect(duplicated.broadcastSettings).not.toBe(source.broadcastSettings);
+    expect(duplicated.broadcastSettings?.transition).not.toBe(
+      source.broadcastSettings?.transition,
+    );
 
     const sourceDocument = getLayerDocument(source.pages[0]!);
     const duplicatedDocument = getLayerDocument(duplicated.pages[0]!);
@@ -168,6 +177,30 @@ describe('Project複製', () => {
     expect(copiedName.endsWith(' のコピー')).toBe(true);
   });
 
+  it('元Projectと同じProject IDは拒否する', () => {
+    expect(() =>
+      duplicateProject(sourceProject(), {
+        id: 'project-source',
+        createdAt: DUPLICATED_AT,
+        createPageId: (_page, index) => `page-duplicate-${index}`,
+        createLayerId: (_layer, pageIndex, layerIndex) =>
+          `layer-duplicate-${pageIndex}-${layerIndex}`,
+      }),
+    ).toThrow('Project id must differ from source');
+  });
+
+  it('元Pageと同じPage IDは拒否する', () => {
+    expect(() =>
+      duplicateProject(sourceProject(), {
+        id: 'project-duplicate',
+        createdAt: DUPLICATED_AT,
+        createPageId: (page) => page.id,
+        createLayerId: (_layer, pageIndex, layerIndex) =>
+          `layer-duplicate-${pageIndex}-${layerIndex}`,
+      }),
+    ).toThrow('Page id must differ from source');
+  });
+
   it('Page ID生成が重複した場合は拒否する', () => {
     expect(() =>
       duplicateProject(sourceProject(), {
@@ -178,6 +211,17 @@ describe('Project複製', () => {
           `layer-duplicate-${pageIndex}-${layerIndex}`,
       }),
     ).toThrow('Duplicate page id');
+  });
+
+  it('元Layerと同じLayer IDは拒否する', () => {
+    expect(() =>
+      duplicateProject(sourceProject(), {
+        id: 'project-duplicate',
+        createdAt: DUPLICATED_AT,
+        createPageId: (_page, index) => `page-duplicate-${index}`,
+        createLayerId: (layer) => layer.id,
+      }),
+    ).toThrow('Layer id must differ from source');
   });
 
   it('Layer ID生成が重複した場合は拒否する', () => {
