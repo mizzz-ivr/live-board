@@ -15,13 +15,16 @@ import {
 import {
   applyWorkspaceCommand,
   type AddProjectCommand,
+  type DeleteProjectCommand,
   type RenameProjectCommand,
   type SelectProjectCommand,
   type WorkspaceCommand,
 } from './workspace-commands.js';
 import {
   appendWorkspaceProject,
+  deleteWorkspaceProject,
   renameWorkspaceProject,
+  restoreWorkspaceProject,
   selectWorkspaceProject,
 } from './workspace-projects.js';
 
@@ -39,6 +42,13 @@ export interface AddProjectWorkspaceHistoryEntry
   projectSnapshot: Project;
 }
 
+export interface DeleteProjectWorkspaceHistoryEntry
+  extends WorkspaceHistoryEntryBase {
+  command: DeleteProjectCommand;
+  projectSnapshot: Project;
+  projectIndex: number;
+}
+
 export interface SelectProjectWorkspaceHistoryEntry
   extends WorkspaceHistoryEntryBase {
   command: SelectProjectCommand;
@@ -52,6 +62,7 @@ export interface RenameProjectWorkspaceHistoryEntry
 
 export type WorkspaceHistoryEntry =
   | AddProjectWorkspaceHistoryEntry
+  | DeleteProjectWorkspaceHistoryEntry
   | SelectProjectWorkspaceHistoryEntry
   | RenameProjectWorkspaceHistoryEntry;
 
@@ -224,11 +235,28 @@ export function canRedoWorkspace(state: WorkspaceCommandState): boolean {
 export function getWorkspaceHistoryRestorableProjects(
   state: WorkspaceCommandState,
 ): Project[] {
-  return state.histories.workspace.future.flatMap((entry) =>
-    isAddProjectWorkspaceHistoryEntry(entry)
-      ? [cloneProject(entry.projectSnapshot)]
-      : [],
+  const currentProjectIds = new Set(
+    state.workspace.projects.map((project) => project.id),
   );
+  const restorableById = new Map<ProjectId, Project>();
+  const snapshots = [
+    ...state.histories.workspace.past.flatMap((entry) =>
+      isDeleteProjectWorkspaceHistoryEntry(entry)
+        ? [entry.projectSnapshot]
+        : [],
+    ),
+    ...state.histories.workspace.future.flatMap((entry) =>
+      isAddProjectWorkspaceHistoryEntry(entry)
+        ? [entry.projectSnapshot]
+        : [],
+    ),
+  ];
+  for (const project of snapshots) {
+    if (!currentProjectIds.has(project.id)) {
+      restorableById.set(project.id, cloneProject(project));
+    }
+  }
+  return [...restorableById.values()];
 }
 
 export function getWorkspaceHistoryRetainedProjectIds(
@@ -246,29 +274,34 @@ export function trimWorkspaceRedoHistoryForExternalProjectBytes(
   state: WorkspaceCommandState,
   externalProjectBytes: Readonly<Record<ProjectId, number>>,
 ): WorkspaceCommandState {
+  const originalPast = state.histories.workspace.past;
   const originalFuture = state.histories.workspace.future;
-  if (originalFuture.length === 0) return state;
+  if (originalPast.length === 0 && originalFuture.length === 0) return state;
 
+  let past = originalPast;
   let future = originalFuture;
   while (
-    future.length > 0 &&
+    (past.length > 0 || future.length > 0) &&
     getWorkspaceHistoryAndExternalBytes(
-      state.histories.workspace.past,
+      past,
       future,
       externalProjectBytes,
     ) > state.workspaceHistoryMemoryLimitBytes
   ) {
-    future = future.slice(1);
+    if (future.length > 0) future = future.slice(1);
+    else past = past.slice(1);
   }
-  if (future.length === originalFuture.length) return state;
+  if (
+    past.length === originalPast.length &&
+    future.length === originalFuture.length
+  ) {
+    return state;
+  }
 
   return retainReachableCommandHistories({
     ...state,
     histories: {
-      workspace: {
-        past: state.histories.workspace.past,
-        future,
-      },
+      workspace: { past, future },
       project: state.histories.project,
       page: state.histories.page,
     },
@@ -431,6 +464,20 @@ function createWorkspaceHistoryEntry(
       projectSnapshot: cloneProject(findProject(workspace, command.project.id)),
     });
   }
+  if (command.type === 'workspace.project.delete') {
+    const projectIndex = previousWorkspace.projects.findIndex(
+      (project) => project.id === command.projectId,
+    );
+    return withWorkspaceHistoryEstimate({
+      historyId: `workspace-history:${command.commandId}`,
+      command,
+      previousActiveProjectId,
+      projectSnapshot: cloneProject(
+        findProject(previousWorkspace, command.projectId),
+      ),
+      projectIndex,
+    });
+  }
   if (command.type === 'workspace.project.rename') {
     return withWorkspaceHistoryEstimate({
       historyId: `workspace-history:${command.commandId}`,
@@ -466,6 +513,18 @@ function undoWorkspaceHistoryEntry(
         ...entry,
         projectSnapshot,
       }),
+    };
+  }
+  if (isDeleteProjectWorkspaceHistoryEntry(entry)) {
+    return {
+      workspace: restoreWorkspaceProject(
+        workspace,
+        entry.projectSnapshot,
+        entry.projectIndex,
+        entry.previousActiveProjectId,
+        updatedAt,
+      ),
+      futureEntry: entry,
     };
   }
   if (isRenameProjectWorkspaceHistoryEntry(entry)) {
@@ -508,6 +567,27 @@ function redoWorkspaceHistoryEntry(
       }),
     };
   }
+  if (isDeleteProjectWorkspaceHistoryEntry(entry)) {
+    const projectSnapshot = cloneProject(
+      findProject(workspace, entry.command.projectId),
+    );
+    const projectIndex = workspace.projects.findIndex(
+      (project) => project.id === entry.command.projectId,
+    );
+    return {
+      workspace: deleteWorkspaceProject(
+        workspace,
+        entry.command.projectId,
+        updatedAt,
+      ),
+      pastEntry: withWorkspaceHistoryEstimate({
+        ...entry,
+        previousActiveProjectId,
+        projectSnapshot,
+        projectIndex,
+      }),
+    };
+  }
   if (isRenameProjectWorkspaceHistoryEntry(entry)) {
     return {
       workspace: renameWorkspaceProject(
@@ -536,6 +616,12 @@ function isAddProjectWorkspaceHistoryEntry(
   entry: WorkspaceHistoryEntry,
 ): entry is AddProjectWorkspaceHistoryEntry {
   return entry.command.type === 'workspace.project.add';
+}
+
+function isDeleteProjectWorkspaceHistoryEntry(
+  entry: WorkspaceHistoryEntry,
+): entry is DeleteProjectWorkspaceHistoryEntry {
+  return entry.command.type === 'workspace.project.delete';
 }
 
 function isRenameProjectWorkspaceHistoryEntry(
@@ -611,13 +697,18 @@ function getWorkspaceHistoryAndExternalBytes(
     (total, entry) => total + entry.estimatedBytes,
     0,
   );
-  const retainedProjectIds = new Set(
-    future.flatMap((entry) =>
+  const retainedProjectIds = new Set([
+    ...past.flatMap((entry) =>
+      isDeleteProjectWorkspaceHistoryEntry(entry)
+        ? [entry.projectSnapshot.id]
+        : [],
+    ),
+    ...future.flatMap((entry) =>
       isAddProjectWorkspaceHistoryEntry(entry)
         ? [entry.projectSnapshot.id]
         : [],
     ),
-  );
+  ]);
   const externalBytes = [...retainedProjectIds].reduce((total, projectId) => {
     const bytes = externalProjectBytes[projectId] ?? 0;
     return total + (Number.isSafeInteger(bytes) && bytes > 0 ? bytes : 0);

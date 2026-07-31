@@ -6,7 +6,9 @@ import {
   createPage,
   createProject,
   createWorkspace,
+  deleteWorkspaceProject,
   renameWorkspaceProject,
+  restoreWorkspaceProject,
   selectWorkspaceProject,
 } from '../src/index.js';
 
@@ -116,6 +118,64 @@ describe('workspace projects', () => {
     expect(() => renameWorkspaceProject(workspace(), 'missing', '名前', TIMESTAMP)).toThrow(
       'Project not found: missing',
     );
+  });
+
+  it('アクティブProjectを削除し、同じ位置の次Projectを選択する', () => {
+    const current = workspace();
+    const next = deleteWorkspaceProject(current, 'project-1', TIMESTAMP);
+
+    expect(next.projects.map((candidate) => candidate.id)).toEqual(['project-2']);
+    expect(next.activeProjectId).toBe('project-2');
+    expect(current.projects).toHaveLength(2);
+  });
+
+  it('非アクティブProjectを削除して現在の選択を維持する', () => {
+    const current = workspace();
+    const next = deleteWorkspaceProject(current, 'project-2', TIMESTAMP);
+
+    expect(next.projects.map((candidate) => candidate.id)).toEqual(['project-1']);
+    expect(next.activeProjectId).toBe('project-1');
+  });
+
+  it('削除Projectを元の位置と選択状態で復元する', () => {
+    const current = workspace();
+    const deletedProject = current.projects[0]!;
+    const deleted = deleteWorkspaceProject(current, deletedProject.id, TIMESTAMP);
+    const restored = restoreWorkspaceProject(
+      deleted,
+      deletedProject,
+      0,
+      deletedProject.id,
+      TIMESTAMP,
+    );
+
+    expect(restored.projects.map((candidate) => candidate.id)).toEqual([
+      'project-1',
+      'project-2',
+    ]);
+    expect(restored.activeProjectId).toBe('project-1');
+    expect(restored.projects[0]).not.toBe(deletedProject);
+  });
+
+  it('最後のProject削除と不正な復元位置を拒否する', () => {
+    const singleProjectWorkspace = createWorkspace({
+      id: 'workspace-1',
+      name: 'Workspace',
+      projects: [project('project-1')],
+      createdAt: TIMESTAMP,
+    });
+    expect(() =>
+      deleteWorkspaceProject(singleProjectWorkspace, 'project-1', TIMESTAMP),
+    ).toThrow('Workspace must contain at least one project');
+    expect(() =>
+      restoreWorkspaceProject(
+        workspace(),
+        project('project-3'),
+        99,
+        'project-1',
+        TIMESTAMP,
+      ),
+    ).toThrow('Invalid project index: 99');
   });
 
 });

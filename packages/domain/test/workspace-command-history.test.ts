@@ -3,6 +3,7 @@ import {
   canRedoWorkspace,
   canUndoWorkspace,
   createAddProjectCommand,
+  createDeleteProjectCommand,
   createPage,
   createProject,
   createRenameProjectCommand,
@@ -13,6 +14,7 @@ import {
   findProject,
   getWorkspaceHistory,
   getWorkspaceHistoryBytes,
+  getWorkspaceHistoryRetainedProjectIds,
   redoWorkspaceCommand,
   replaceProject,
   trimWorkspaceRedoHistoryForExternalProjectBytes,
@@ -193,6 +195,101 @@ describe('workspace command history', () => {
     );
     expect(next).toBe(state);
     expect(canUndoWorkspace(next)).toBe(false);
+  });
+
+  it('Project削除を元の位置と選択状態でUndo・Redoできる', () => {
+    const added = dispatchWorkspaceCommand(
+      createWorkspaceCommandState(workspace()),
+      createAddProjectCommand('workspace-1', project('project-2'), {
+        commandId: 'command-add',
+        createdAt: TIMESTAMP,
+      }),
+    );
+    const deleted = dispatchWorkspaceCommand(
+      added,
+      createDeleteProjectCommand('workspace-1', 'project-2', {
+        commandId: 'command-delete',
+        createdAt: TIMESTAMP,
+      }),
+    );
+
+    expect(deleted.workspace.projects.map((candidate) => candidate.id)).toEqual([
+      'project-1',
+    ]);
+    expect(deleted.workspace.activeProjectId).toBe('project-1');
+    expect(getWorkspaceHistoryRetainedProjectIds(deleted)).toContain('project-2');
+
+    const undone = undoWorkspaceCommand(deleted);
+    expect(undone.workspace.projects.map((candidate) => candidate.id)).toEqual([
+      'project-1',
+      'project-2',
+    ]);
+    expect(undone.workspace.activeProjectId).toBe('project-2');
+
+    const redone = redoWorkspaceCommand(undone);
+    expect(redone.workspace.projects.map((candidate) => candidate.id)).toEqual([
+      'project-1',
+    ]);
+    expect(redone.workspace.activeProjectId).toBe('project-1');
+  });
+
+  it('削除Undo後の編集内容をRedo時に退避し、次のUndoで復元する', () => {
+    const added = dispatchWorkspaceCommand(
+      createWorkspaceCommandState(workspace()),
+      createAddProjectCommand('workspace-1', project('project-2'), {
+        commandId: 'command-add',
+        createdAt: TIMESTAMP,
+      }),
+    );
+    const deleted = dispatchWorkspaceCommand(
+      added,
+      createDeleteProjectCommand('workspace-1', 'project-2', {
+        commandId: 'command-delete',
+        createdAt: TIMESTAMP,
+      }),
+    );
+    const restored = undoWorkspaceCommand(deleted);
+    const restoredProject = findProject(restored.workspace, 'project-2');
+    const edited = {
+      ...restored,
+      workspace: replaceProject(
+        restored.workspace,
+        { ...restoredProject, name: '復元後に編集したProject' },
+        TIMESTAMP,
+      ),
+    };
+
+    const deletedAgain = redoWorkspaceCommand(edited);
+    const restoredAgain = undoWorkspaceCommand(deletedAgain);
+    expect(findProject(restoredAgain.workspace, 'project-2').name).toBe(
+      '復元後に編集したProject',
+    );
+  });
+
+  it('削除Projectの外部データ込みで上限を超えた場合はUndo履歴を回収する', () => {
+    const added = dispatchWorkspaceCommand(
+      createWorkspaceCommandState(workspace(), 100, 10_000),
+      createAddProjectCommand('workspace-1', project('project-2'), {
+        commandId: 'command-add',
+        createdAt: TIMESTAMP,
+      }),
+    );
+    const deleted = dispatchWorkspaceCommand(
+      added,
+      createDeleteProjectCommand('workspace-1', 'project-2', {
+        commandId: 'command-delete',
+        createdAt: TIMESTAMP,
+      }),
+    );
+    expect(canUndoWorkspace(deleted)).toBe(true);
+
+    const trimmed = trimWorkspaceRedoHistoryForExternalProjectBytes(deleted, {
+      'project-2': 100_000,
+    });
+    expect(canUndoWorkspace(trimmed)).toBe(false);
+    expect(getWorkspaceHistoryRetainedProjectIds(trimmed)).not.toContain(
+      'project-2',
+    );
   });
 
 });
