@@ -33,13 +33,33 @@ export function duplicateProject(
   sourceProject: Project,
   input: DuplicateProjectInput,
 ): Project {
+  if (input.id === sourceProject.id) {
+    throw new Error(`Project id must differ from source: ${input.id}`);
+  }
+
   const createdAt = input.createdAt ?? new Date().toISOString();
-  const pageIdMap = new Map(
-    sourceProject.pages.map((page, index) => [
-      page.id,
-      input.createPageId(page, index),
-    ]),
+  const sourcePageIds = new Set(
+    sourceProject.pages.map((page) => page.id),
   );
+  const sourceLayerIds = new Set(
+    sourceProject.pages.flatMap((page) =>
+      getLayerDocument(page).layers.map((layer) => layer.id),
+    ),
+  );
+  const generatedPageIds = new Set<PageId>();
+  const generatedLayerIds = new Set<LayerId>();
+  const pageIdMap = new Map<PageId, PageId>();
+
+  sourceProject.pages.forEach((page, index) => {
+    const pageId = input.createPageId(page, index);
+    assertFreshGeneratedId(
+      pageId,
+      sourcePageIds,
+      generatedPageIds,
+      'page',
+    );
+    pageIdMap.set(page.id, pageId);
+  });
 
   const pages = sourceProject.pages.map((sourcePage, pageIndex) => {
     const pageId = requireMappedId(pageIdMap, sourcePage.id, 'Page');
@@ -64,11 +84,13 @@ export function duplicateProject(
         pageIndex,
         input,
         createdAt,
+        sourceLayerIds,
+        generatedLayerIds,
       ),
     };
   });
 
-  return createProject({
+  const project = createProject({
     id: input.id,
     workspaceId: sourceProject.workspaceId,
     name: input.name ?? createProjectCopyName(sourceProject.name),
@@ -87,6 +109,12 @@ export function duplicateProject(
     createdAt,
     updatedAt: createdAt,
   });
+  return sourceProject.broadcastSettings === undefined
+    ? project
+    : {
+        ...project,
+        broadcastSettings: cloneSerializable(sourceProject.broadcastSettings),
+      };
 }
 
 export function createProjectCopyName(sourceName: string): string {
@@ -102,15 +130,23 @@ function duplicateLayerDocument(
   pageIndex: number,
   input: DuplicateProjectInput,
   createdAt: string,
+  sourceLayerIds: ReadonlySet<LayerId>,
+  generatedLayerIds: Set<LayerId>,
 ): LayerDocument {
   const sourceDocument = getLayerDocument(sourcePage);
   assertLayerDocumentIntegrity(sourcePage.id, sourceDocument);
-  const layerIdMap = new Map(
-    sourceDocument.layers.map((layer, layerIndex) => [
-      layer.id,
-      input.createLayerId(layer, pageIndex, layerIndex),
-    ]),
-  );
+  const layerIdMap = new Map<LayerId, LayerId>();
+
+  sourceDocument.layers.forEach((layer, layerIndex) => {
+    const layerId = input.createLayerId(layer, pageIndex, layerIndex);
+    assertFreshGeneratedId(
+      layerId,
+      sourceLayerIds,
+      generatedLayerIds,
+      'layer',
+    );
+    layerIdMap.set(layer.id, layerId);
+  });
 
   const layers = sourceDocument.layers.map((sourceLayer) => {
     const layer = cloneSerializable(sourceLayer);
@@ -154,6 +190,23 @@ function duplicateLayerDocument(
   };
   assertLayerDocumentIntegrity(targetPageId, document);
   return document;
+}
+
+function assertFreshGeneratedId<T extends string>(
+  id: T,
+  sourceIds: ReadonlySet<T>,
+  generatedIds: Set<T>,
+  entityName: 'page' | 'layer',
+): void {
+  if (sourceIds.has(id)) {
+    throw new Error(
+      `${entityName === 'page' ? 'Page' : 'Layer'} id must differ from source: ${id}`,
+    );
+  }
+  if (generatedIds.has(id)) {
+    throw new Error(`Duplicate ${entityName} id: ${id}`);
+  }
+  generatedIds.add(id);
 }
 
 function requireMappedId<T extends string>(
