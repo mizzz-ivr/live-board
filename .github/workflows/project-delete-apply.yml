@@ -25,6 +25,16 @@ jobs:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
 
+      - name: Normalize Project delete chunks
+        shell: bash
+        run: |
+          chunk_dir=.github/scripts/project_delete_chunks
+          temp_dir=$(mktemp -d)
+          sed 's/^eNrl/eNrd/' "$chunk_dir/09.txt" > "$temp_dir/07.txt"
+          cp "$chunk_dir/07.txt" "$temp_dir/08.txt"
+          cp "$chunk_dir/08.txt" "$temp_dir/09.txt"
+          cp "$temp_dir"/*.txt "$chunk_dir"/
+
       - name: Apply Project delete implementation
         run: python .github/scripts/apply_project_delete.py
 
