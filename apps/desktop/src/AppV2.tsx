@@ -508,13 +508,14 @@ export function AppV2() {
         createPageId: () => createEntityId('page'),
         createLayerId: () => createEntityId('layer'),
       });
-      const nextCommandState = dispatchWorkspaceCommandWithCanvasHistory(
+      const command = createAddProjectCommand(
+        commandState.workspace.id,
+        nextProject,
+        createCommandMetadata('project-duplicate'),
+      );
+      const validatedState = dispatchWorkspaceCommandWithCanvasHistory(
         commandState,
-        createAddProjectCommand(
-          commandState.workspace.id,
-          nextProject,
-          createCommandMetadata('project-duplicate'),
-        ),
+        command,
       );
       const sourceLibrary =
         assetLibraries[projectId] ?? createProjectAssetLibrary();
@@ -523,7 +524,11 @@ export function AppV2() {
         ...current,
         [nextProject.id]: cloneProjectAssetLibrary(sourceLibrary),
       }));
-      setCommandState(nextCommandState);
+      setCommandState((current) =>
+        current === commandState
+          ? validatedState
+          : dispatchWorkspaceCommandWithCanvasHistory(current, command),
+      );
       setSelection(null);
       setSelectionMode(null);
       setViewport(DEFAULT_CANVAS_VIEWPORT);
