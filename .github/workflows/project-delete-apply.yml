@@ -31,6 +31,7 @@ jobs:
       - name: Remove temporary implementation files
         run: |
           rm .github/scripts/apply_project_delete.py
+          rm -rf .github/scripts/project_delete_chunks
           rm .github/workflows/project-delete-apply.yml
 
       - name: Setup pnpm
