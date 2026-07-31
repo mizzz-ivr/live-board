@@ -13,11 +13,11 @@ Workspace内の複数ProjectをEditorで切り替え、作業対象を明確に�
 - 各ProjectのPage・Layer・配信設定
 - Project単位のAsset Library
 
-Project追加・選択・名前変更はWorkspaceを変更するため、既存のrevision検知、自動保存、明示保存へ合流します。保存形式とIPCは変更しません。
+Project追加・複製・選択・名前変更はWorkspaceを変更するため、既存のrevision検知、自動保存、明示保存へ合流します。保存形式とIPCは変更しません。
 
 ## Project操作のCommand履歴
 
-Project追加・選択・名前変更は`WorkspaceCommand`として実行します。
+Project追加・選択・名前変更は`WorkspaceCommand`として実行します。Project複製はPage・Layer IDを再採番したProjectを生成し、既存の`workspace.project.add`として実行します。
 
 - `workspace.project.add`: Projectを追加して選択
 - `workspace.project.select`: 既存Projectを選択
@@ -89,6 +89,7 @@ Project追加をUndoした直後はRedo可能なため、追加Projectに紐づ�
 ## 操作
 
 - `＋`: 初期Pageを持つProjectを追加して選択
+- `複製`: Page・Layer・描画・Asset参照・配信設定を保持した独立Projectを追加して選択
 - `名前`: 1〜120文字のProject名へ変更
 - `操作を元に戻す`: 直近のProject追加・選択・名前変更をUndo
 - `操作をやり直す`: UndoしたProject操作をRedo
@@ -118,6 +119,8 @@ OBS同期は`publishActiveProjectBroadcastSnapshot`へ集約し、Workspaceの`a
 - Project追加Undoで既存Projectの後続編集を失わない
 - 追加Projectの編集内容をRedoで復元する
 - Project選択をUndo / Redoできる
+- Project複製でPage・Layer IDと参照を再採番し、描画・Transform・Asset参照・配信設定を維持する
+- Project複製をUndo / Redoでき、Redo可能な間はAsset Libraryを保持する
 - Project名変更をUndo / Redoできる
 - 無効なProject名をDomain境界で拒否する
 - Workspace履歴が推定バイト数上限を超えない
@@ -154,7 +157,7 @@ Rendererタブモデルでは次を無変更として扱います。
 
 ## 対象外
 
-- Project本体の削除、複製
+- Project本体の削除
 - Project本体の並び順変更
 - タブ状態の永続化
 - 別ウィンドウへの分離

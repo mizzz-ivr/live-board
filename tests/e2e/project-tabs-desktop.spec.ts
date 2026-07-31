@@ -114,6 +114,35 @@ test('Projectタブをピン留めし、キーボードとドラッグで並び�
   ).toHaveAttribute('aria-pressed', 'true');
 });
 
+test('Projectを複製し、Page構成とProject操作Undo・Redoを維持できる', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas-surface')).toBeVisible();
+
+  const tablist = page.getByRole('tablist', { name: 'プロジェクト' });
+  await page.getByRole('button', { name: 'ページを追加' }).click();
+  await expect(page.locator('.page-list .page-row')).toHaveCount(2);
+
+  await page.getByRole('button', { name: '新しいプロジェクトを複製' }).click();
+
+  const duplicatedTab = tablist.getByRole('tab', {
+    name: /新しいプロジェクト のコピー/,
+  });
+  await expect(tablist.getByRole('tab')).toHaveCount(2);
+  await expect(duplicatedTab).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.page-list .page-row')).toHaveCount(2);
+  await expect(page.getByText('ワークスペースに未保存の変更あり')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Project操作を元に戻す' }).click();
+  await expect(tablist.getByRole('tab')).toHaveCount(1);
+  await expect(
+    tablist.getByRole('tab', { name: /新しいプロジェクト/ }),
+  ).toHaveAttribute('aria-selected', 'true');
+
+  await page.getByRole('button', { name: 'Project操作をやり直す' }).click();
+  await expect(tablist.getByRole('tab')).toHaveCount(2);
+  await expect(duplicatedTab).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.page-list .page-row')).toHaveCount(2);
+});
 
 test('Project名を変更し、Project操作でUndo・Redoできる', async ({ page }) => {
   await page.goto('/');
