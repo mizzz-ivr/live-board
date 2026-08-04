@@ -23,7 +23,20 @@ jobs:
           fetch-depth: 0
 
       - name: Apply Project tab persistence implementation
-        run: python .github/scripts/apply_project_tab_persistence.py
+        run: |
+          python .github/scripts/apply_project_tab_persistence.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('packages/persistence/src/archive.ts')
+          content = path.read_text(encoding='utf-8')
+          old = '  editorState?: LiveboardEditorState;'
+          if content.count(old) != 2:
+              raise RuntimeError('editorState optional type target mismatch')
+          path.write_text(
+              content.replace(old, '  editorState?: LiveboardEditorState | undefined;'),
+              encoding='utf-8',
+          )
+          PY
 
       - name: Remove temporary implementation files
         run: |
