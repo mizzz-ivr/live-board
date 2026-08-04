@@ -1,10 +1,11 @@
 name: Project Tab Persistence Apply
 
 on:
-  push:
+  pull_request:
     branches:
-      - feat/project-tab-persistence
+      - main
     paths:
+      - .github/scripts/apply_project_tab_persistence.py
       - .github/workflows/project-tab-persistence-apply.yml
 
 permissions:
@@ -12,6 +13,7 @@ permissions:
 
 jobs:
   apply-and-verify:
+    if: github.head_ref == 'feat/project-tab-persistence'
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout feature branch
@@ -65,5 +67,3 @@ jobs:
           git add -A
           git commit -m "Projectタブの表示状態を保存・復元"
           git push origin HEAD:feat/project-tab-persistence
-
-# trigger retry after PR creation
