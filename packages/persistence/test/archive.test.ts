@@ -1,6 +1,9 @@
 import {
+  appendWorkspaceProject,
   createEmptyWorkspace,
   createLayer,
+  createPage,
+  createProject,
   createProjectAssetLibrary,
   importProjectAsset,
   withRichImageContent,
@@ -62,6 +65,30 @@ function createFixture() {
   return { workspace, assetLibraries, imported };
 }
 
+function createTwoProjectFixture() {
+  const fixture = createFixture();
+  const projectId = 'project-2';
+  const page = createPage({
+    id: 'page-2',
+    projectId,
+    name: 'Page 2',
+    createdAt: savedAt,
+  });
+  const project = createProject({
+    id: projectId,
+    workspaceId: fixture.workspace.id,
+    name: 'Project 2',
+    pages: [page],
+    createdAt: savedAt,
+  });
+  const workspace = appendWorkspaceProject(
+    fixture.workspace,
+    project,
+    savedAt,
+  );
+  return { ...fixture, workspace, project };
+}
+
 describe('.liveboard archive', () => {
   it('manifestとAssetを分離してWorkspace全体を保存・再読込できる', () => {
     const fixture = createFixture();
@@ -85,6 +112,76 @@ describe('.liveboard archive', () => {
     );
     expect(loaded.archiveSha256).toMatch(/^[a-f0-9]{64}$/);
     expect(loaded.migratedFromVersion).toBeNull();
+    expect(loaded.editorState).toBeUndefined();
+  });
+
+  it('Projectタブの表示状態をmanifestへ保存・再読込できる', () => {
+    const fixture = createTwoProjectFixture();
+    const firstProjectId = fixture.workspace.projects[0]!.id;
+    const archive = createLiveboardArchive({
+      workspace: fixture.workspace,
+      assetLibraries: fixture.assetLibraries,
+      editorState: {
+        projectTabs: {
+          openProjectIds: [fixture.project.id],
+          pinnedProjectIds: [fixture.project.id],
+        },
+      },
+      savedAt,
+    });
+
+    const loaded = loadLiveboardArchive(archive);
+    expect(loaded.editorState).toEqual({
+      projectTabs: {
+        openProjectIds: [fixture.project.id],
+        pinnedProjectIds: [fixture.project.id],
+      },
+    });
+    expect(loaded.editorState?.projectTabs?.openProjectIds).not.toContain(
+      firstProjectId,
+    );
+    expect(loaded.manifest.schemaVersion).toBe(1);
+  });
+
+  it('不明・重複Project IDを除外し、アクティブProjectを必ず開く', () => {
+    const fixture = createTwoProjectFixture();
+    const activeProjectId = fixture.workspace.activeProjectId;
+    const archive = createLiveboardArchive({
+      workspace: fixture.workspace,
+      assetLibraries: fixture.assetLibraries,
+      editorState: {
+        projectTabs: {
+          openProjectIds: ['missing', activeProjectId, activeProjectId],
+          pinnedProjectIds: ['missing', activeProjectId],
+        },
+      },
+      savedAt,
+    });
+
+    const loaded = loadLiveboardArchive(archive);
+    expect(loaded.editorState).toEqual({
+      projectTabs: {
+        openProjectIds: [activeProjectId],
+        pinnedProjectIds: [activeProjectId],
+      },
+    });
+  });
+
+  it('不正なeditorStateはWorkspaceを壊さず既定状態へフォールバックする', () => {
+    const fixture = createFixture();
+    const archive = createLiveboardArchive({
+      workspace: fixture.workspace,
+      assetLibraries: fixture.assetLibraries,
+      editorState: {
+        projectTabs: {
+          openProjectIds: 'invalid',
+          pinnedProjectIds: [],
+        },
+      } as never,
+      savedAt,
+    });
+    const loaded = loadLiveboardArchive(archive);
+    expect(loaded.editorState).toBeUndefined();
   });
 
   it('空のAsset Libraryを含むWorkspaceを保存できる', () => {
@@ -123,17 +220,33 @@ describe('.liveboard archive', () => {
     expect(loaded.assetLibraries[project.id]!.assets[0]!.id).toBe(fixture.imported.asset.id);
   });
 
-  it('複製後も元Bundleを変更しない', () => {
-    const fixture = createFixture();
-    const before = JSON.stringify(fixture);
+  it('複製後も元Bundleを変更せず、ProjectタブIDを再採番する', () => {
+    const fixture = createTwoProjectFixture();
+    const bundle = {
+      workspace: fixture.workspace,
+      assetLibraries: fixture.assetLibraries,
+      editorState: {
+        projectTabs: {
+          openProjectIds: [fixture.project.id],
+          pinnedProjectIds: [fixture.project.id],
+        },
+      },
+    };
+    const before = JSON.stringify(bundle);
     const duplicated = duplicateLiveboardBundle(
-      { workspace: fixture.workspace, assetLibraries: fixture.assetLibraries },
+      bundle,
       'workspace-copy',
       savedAt,
     );
-    expect(JSON.stringify(fixture)).toBe(before);
+    expect(JSON.stringify(bundle)).toBe(before);
     expect(duplicated.workspace.id).toBe('workspace-copy');
     expect(duplicated.workspace.name).toContain('コピー');
+    expect(duplicated.editorState).toEqual({
+      projectTabs: {
+        openProjectIds: ['workspace-copy:project:2'],
+        pinnedProjectIds: ['workspace-copy:project:2'],
+      },
+    });
   });
 
   it('衝突時に新しいWorkspace IDがなければ正式領域へ反映しない', () => {

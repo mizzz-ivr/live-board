@@ -20,6 +20,11 @@ import {
   type SetStateAction,
 } from 'react';
 import {
+  restoreProjectTabsState,
+  toPersistedProjectTabsState,
+  type ProjectTabsState,
+} from './project-tabs-model';
+import {
   resolveWorkspacePersistenceIdleStatus,
   resolveWorkspacePersistenceSaveCompletion,
 } from './workspace-persistence-status';
@@ -54,10 +59,12 @@ export interface WorkspacePersistenceController {
 export function useWorkspacePersistence(input: {
   commandState: CanvasWorkspaceCommandState;
   assetLibraries: Record<string, ProjectAssetLibrary>;
+  projectTabsState: ProjectTabsState;
   setCommandState: Dispatch<SetStateAction<CanvasWorkspaceCommandState>>;
   setAssetLibraries: Dispatch<
     SetStateAction<Record<string, ProjectAssetLibrary>>
   >;
+  setProjectTabsState: Dispatch<SetStateAction<ProjectTabsState>>;
 }): WorkspacePersistenceController {
   const api = window.liveBoard;
   const [busy, setBusy] = useState(false);
@@ -76,12 +83,15 @@ export function useWorkspacePersistence(input: {
     number | null
   >(null);
   const revisionRef = useRef(0);
+  const workspaceSessionRevisionRef = useRef(0);
   const suppressNextChangeRef = useRef(false);
   const workspaceRef = useRef(input.commandState.workspace);
   const assetLibrariesRef = useRef(input.assetLibraries);
+  const projectTabsStateRef = useRef(input.projectTabsState);
 
   workspaceRef.current = input.commandState.workspace;
   assetLibrariesRef.current = input.assetLibraries;
+  projectTabsStateRef.current = input.projectTabsState;
 
   const signature = useMemo(
     () =>
@@ -100,8 +110,15 @@ export function useWorkspacePersistence(input: {
             },
           ]),
         ),
+        projectTabs: toPersistedProjectTabsState(input.projectTabsState),
+        workspaceSessionRevision,
       }),
-    [input.commandState.workspace, input.assetLibraries],
+    [
+      input.commandState.workspace,
+      input.assetLibraries,
+      input.projectTabsState,
+      workspaceSessionRevision,
+    ],
   );
   const lastSignatureRef = useRef(signature);
 
@@ -165,6 +182,7 @@ export function useWorkspacePersistence(input: {
         const archive = createCurrentArchive(
           workspaceRef.current,
           assetLibrariesRef.current,
+          projectTabsStateRef.current,
         );
         setStatus('保存: 自動保存中');
         void api
@@ -199,14 +217,30 @@ export function useWorkspacePersistence(input: {
       revisionRef.current = 0;
       setRevision(0);
       setLastExplicitSaveRevision(nextDocument === null ? null : 0);
-      setWorkspaceSessionRevision((current) => current + 1);
+      const nextWorkspaceSessionRevision =
+        workspaceSessionRevisionRef.current + 1;
+      workspaceSessionRevisionRef.current = nextWorkspaceSessionRevision;
+      setWorkspaceSessionRevision(nextWorkspaceSessionRevision);
       input.setCommandState(createCanvasWorkspaceCommandState(bundle.workspace));
       input.setAssetLibraries(bundle.assetLibraries);
+      input.setProjectTabsState(
+        restoreProjectTabsState(
+          bundle.workspace.id,
+          bundle.workspace.projects.map((project) => project.id),
+          bundle.workspace.activeProjectId,
+          bundle.editorState?.projectTabs,
+          nextWorkspaceSessionRevision,
+        ),
+      );
       setDocument(nextDocument);
       setStatus(nextDocument === null ? '保存: 未保存' : '保存: 読込済み');
       setError(null);
     },
-    [input.setAssetLibraries, input.setCommandState],
+    [
+      input.setAssetLibraries,
+      input.setCommandState,
+      input.setProjectTabsState,
+    ],
   );
 
   const createNew = useCallback((): void => {
@@ -230,6 +264,7 @@ export function useWorkspacePersistence(input: {
         const archive = createCurrentArchive(
           workspaceRef.current,
           assetLibrariesRef.current,
+          projectTabsStateRef.current,
         );
         const response = await api.saveWorkspace({
           requestId: globalThis.crypto.randomUUID(),
@@ -280,6 +315,7 @@ export function useWorkspacePersistence(input: {
         {
           workspace: loaded.workspace,
           assetLibraries: loaded.assetLibraries,
+          editorState: loaded.editorState,
         },
         response.document,
       );
@@ -334,6 +370,7 @@ export function useWorkspacePersistence(input: {
         {
           workspace: loaded.workspace,
           assetLibraries: loaded.assetLibraries,
+          editorState: loaded.editorState,
         },
         createWorkspaceId('import'),
       );
@@ -354,6 +391,11 @@ export function useWorkspacePersistence(input: {
           {
             workspace: workspaceRef.current,
             assetLibraries: assetLibrariesRef.current,
+            editorState: {
+              projectTabs: toPersistedProjectTabsState(
+                projectTabsStateRef.current,
+              ),
+            },
           },
           createWorkspaceId('copy'),
         ),
@@ -448,6 +490,7 @@ export function useWorkspacePersistence(input: {
           {
             workspace: loaded.workspace,
             assetLibraries: loaded.assetLibraries,
+            editorState: loaded.editorState,
           },
           null,
         );
@@ -522,10 +565,14 @@ export function useWorkspacePersistence(input: {
 function createCurrentArchive(
   workspace: CanvasWorkspaceCommandState['workspace'],
   assetLibraries: Record<string, ProjectAssetLibrary>,
+  projectTabsState: ProjectTabsState,
 ): Uint8Array {
   return createLiveboardArchive({
     workspace,
     assetLibraries,
+    editorState: {
+      projectTabs: toPersistedProjectTabsState(projectTabsState),
+    },
     appVersion: APP_VERSION,
   });
 }

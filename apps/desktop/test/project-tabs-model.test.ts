@@ -6,7 +6,9 @@ import {
   moveProjectTabByOffset,
   reopenLastProjectTab,
   resolveProjectTabNavigation,
+  restoreProjectTabsState,
   synchronizeProjectTabsState,
+  toPersistedProjectTabsState,
   toggleProjectTabPin,
 } from '../src/project-tabs-model';
 
@@ -20,6 +22,7 @@ describe('project tabs model', () => {
       sessionRevision: 0,
       openProjectIds: ['p3', 'p4'],
       pinnedProjectIds: [],
+      closedProjectIds: [],
       recentlyClosedTabs: [],
     });
   });
@@ -42,6 +45,7 @@ describe('project tabs model', () => {
       sessionRevision: 4,
       openProjectIds: ['p1', 'p2'],
       pinnedProjectIds: [],
+      closedProjectIds: [],
       recentlyClosedTabs: [],
     });
   });
@@ -97,6 +101,7 @@ describe('project tabs model', () => {
     const state = createProjectTabsState('workspace-1', ['p1', 'p2', 'p3']);
     const middle = closeProjectTab(state, 'p2', 'p2');
     expect(middle.state.openProjectIds).toEqual(['p1', 'p3']);
+    expect(middle.state.closedProjectIds).toEqual(['p2']);
     expect(middle.nextActiveProjectId).toBe('p3');
 
     const last = closeProjectTab(state, 'p3', 'p3');
@@ -139,6 +144,58 @@ describe('project tabs model', () => {
     const reopened = reopenLastProjectTab(state, ['p1', 'p2', 'p3']);
     expect(reopened.state.openProjectIds).toEqual(['p3', 'p1', 'p2']);
     expect(reopened.state.pinnedProjectIds).toEqual(['p3']);
+  });
+
+  it('保存済みの表示順・Close・ピン留めを復元して新規Projectだけを追加する', () => {
+    const restored = restoreProjectTabsState(
+      'workspace-1',
+      ['p1', 'p2', 'p3'],
+      'p1',
+      {
+        openProjectIds: ['p3', 'p1'],
+        pinnedProjectIds: ['p3'],
+      },
+      7,
+    );
+
+    expect(restored).toEqual({
+      workspaceId: 'workspace-1',
+      sessionRevision: 7,
+      openProjectIds: ['p3', 'p1'],
+      pinnedProjectIds: ['p3'],
+      closedProjectIds: ['p2'],
+      recentlyClosedTabs: [],
+    });
+    expect(toPersistedProjectTabsState(restored)).toEqual({
+      openProjectIds: ['p3', 'p1'],
+      pinnedProjectIds: ['p3'],
+    });
+
+    const synchronized = synchronizeProjectTabsState(
+      restored,
+      'workspace-1',
+      ['p1', 'p2', 'p3', 'p4'],
+      'p1',
+      7,
+    );
+    expect(synchronized.openProjectIds).toEqual(['p3', 'p1', 'p4']);
+    expect(synchronized.closedProjectIds).toEqual(['p2']);
+  });
+
+  it('保存状態にアクティブProjectがなくても開いた状態へ補正する', () => {
+    const restored = restoreProjectTabsState(
+      'workspace-1',
+      ['p1', 'p2'],
+      'p2',
+      {
+        openProjectIds: ['missing', 'p1', 'p1'],
+        pinnedProjectIds: ['missing', 'p1'],
+      },
+      2,
+    );
+    expect(restored.openProjectIds).toEqual(['p1', 'p2']);
+    expect(restored.pinnedProjectIds).toEqual(['p1']);
+    expect(restored.closedProjectIds).toEqual([]);
   });
 
   it('左右キーは循環し、HomeとEndで現在の表示順の端へ移動する', () => {

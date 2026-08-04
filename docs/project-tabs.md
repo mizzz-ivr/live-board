@@ -6,14 +6,15 @@ Workspace内の複数ProjectをEditorで切り替え、作業対象を明確に�
 
 ## 永続化される状態
 
-`.liveboard`へ保存される正本は既存Workspaceモデルです。
+`.liveboard`へ保存される正本は既存Workspaceモデルと任意のEditor表示状態です。
 
 - `projects`
 - `activeProjectId`
 - 各ProjectのPage・Layer・配信設定
 - Project単位のAsset Library
+- `editorState.projectTabs`の開いているタブ順とピン留め順
 
-Project追加・複製・削除・選択・名前変更はWorkspaceを変更するため、既存のrevision検知、自動保存、明示保存へ合流します。保存形式とIPCは変更しません。
+Project追加・複製・削除・選択・名前変更に加えて、タブのClose・ピン留め・並び替えも既存のrevision検知、自動保存、明示保存へ合流します。タブ操作はWorkspace Command履歴には追加しません。manifest schemaVersionとIPCは変更しません。
 
 ## Project操作のCommand履歴
 
@@ -62,19 +63,22 @@ Project追加をUndoした直後、またはProjectを削除した直後は、Re
 
 その後に別のProject操作を実行してRedo分岐が破棄された場合、または関連履歴・Asset容量込みのWorkspace履歴上限によってRedo entryが削除された場合、現在のWorkspaceにもRedo履歴にも存在しないProjectを到達不能と判定し、上記データをRendererメモリから回収します。
 
-## Rendererセッションだけの状態
+## Editor表示状態とRendererセッション
 
-次は同一Rendererプロセス内だけで保持します。
+次は`.liveboard`の任意`editorState.projectTabs`へ保存します。
 
 - 開いているProjectタブと表示順
 - ピン留めしたProjectタブとピン留め領域内の順序
+
+次は同一Rendererプロセス内だけで保持し、保存しません。
+
 - 直近に閉じた通常タブと閉じる前の位置（最大10件）
 
 タブを閉じても`workspace.projects`、Page、Layer、Asset、Undo / Redo履歴を削除しません。ピン留めタブは誤操作防止のため、ピン留め解除するまで閉じられません。
 
-タブ状態は`AppV2`でEditorセッションとして保持します。そのため、ホームへ戻って「編集を続ける」を選んだ場合は、開いているタブ、並び順、ピン留め、復元履歴を維持します。
+タブ状態は`AppV2`でEditorセッションとして保持します。ホームへ戻って「編集を続ける」を選んだ場合は、開いているタブ、並び順、ピン留め、復元履歴を維持します。
 
-一方、Workspaceの新規作成、ファイル読込、最近使用からの読込、インポート、クラッシュ復元などでBundleを再適用した場合は、`workspaceSessionRevision`を更新します。同じWorkspace IDを再読込した場合でも、セッションrevisionの変更を検知して全Projectを元のProject順で開き直し、以前の並び順・ピン留め・閉じたタブ履歴を持ち越しません。
+Workspaceのファイル読込、最近使用からの読込、クラッシュ復元では、保存済みの開いているタブ順とピン留め順を復元します。直近に閉じたタブ履歴は持ち越しません。保存状態がない既存Archiveは全ProjectをWorkspace順で開きます。存在しないID・重複IDは除外し、`activeProjectId`は必ず開いた状態へ補正します。Workspace複製・インポートではProject IDの再採番へ追従します。
 
 ## ピン留めと並び替え
 
@@ -87,7 +91,7 @@ Project追加をUndoした直後、またはProjectを削除した直後は、Re
 - 新規Projectは通常タブ領域の末尾へ追加
 - 閉じた通常タブは、閉じる前の通常タブ領域内の位置へ復元
 
-タブ順とピン留め状態はProject本体の順序を変更せず、`.liveboard`へ保存しません。
+タブ順・Close状態・ピン留め状態はProject本体の順序を変更せず、任意のEditor表示状態として`.liveboard`へ保存します。
 
 ## 操作
 
@@ -141,7 +145,10 @@ OBS同期は`publishActiveProjectBroadcastSnapshot`へ集約し、Workspaceの`a
 - ドラッグとキーボードで同じ領域内を並び替えられる
 - 閉じた通常タブを閉じる前の位置へ復元する
 - ホーム往復では並び順とピン留め状態を維持する
-- 同一Workspace ID再読込ではタブ状態を初期化する
+- 同一Workspace ID再読込でも保存済みタブ状態を復元する
+- editorStateがない既存Archiveは全ProjectをWorkspace順で開く
+- 不正なProject IDを除外し、アクティブProjectを必ず開く
+- Workspace複製時に保存済みProjectタブIDを再採番する
 - 選択Projectの配信PageをOBS IPCへ送信する
 
 ## エラー境界
@@ -168,6 +175,6 @@ Rendererタブモデルでは次を無変更として扱います。
 - 複数Projectの一括削除
 - 削除済みProjectのタブ順・ピン留め状態の復元
 - Project本体の並び順変更
-- タブ状態の永続化
+- 直近に閉じたタブ履歴の永続化
 - 別ウィンドウへの分離
 - 複数Workspaceの同時編集

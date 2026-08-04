@@ -10,7 +10,13 @@ export interface ProjectTabsState {
   sessionRevision: number;
   openProjectIds: string[];
   pinnedProjectIds: string[];
+  closedProjectIds: string[];
   recentlyClosedTabs: RecentlyClosedProjectTab[];
+}
+
+export interface PersistedProjectTabsState {
+  readonly openProjectIds: readonly string[];
+  readonly pinnedProjectIds: readonly string[];
 }
 
 export type ProjectTabDropPosition = 'before' | 'after';
@@ -25,7 +31,66 @@ export function createProjectTabsState(
     sessionRevision,
     openProjectIds: [...projectIds],
     pinnedProjectIds: [],
+    closedProjectIds: [],
     recentlyClosedTabs: [],
+  };
+}
+
+export function restoreProjectTabsState(
+  workspaceId: string,
+  projectIds: readonly string[],
+  activeProjectId: string,
+  persistedState: PersistedProjectTabsState | undefined,
+  sessionRevision = 0,
+): ProjectTabsState {
+  if (persistedState === undefined) {
+    return createProjectTabsState(workspaceId, projectIds, sessionRevision);
+  }
+
+  const availableIds = new Set(projectIds);
+  const openProjectIds = uniqueAvailableProjectIds(
+    persistedState.openProjectIds,
+    availableIds,
+  );
+  if (availableIds.has(activeProjectId) && !openProjectIds.includes(activeProjectId)) {
+    openProjectIds.push(activeProjectId);
+  }
+  if (openProjectIds.length === 0 && projectIds[0] !== undefined) {
+    openProjectIds.push(projectIds[0]);
+  }
+
+  const openSet = new Set(openProjectIds);
+  const pinnedSet = new Set(
+    uniqueAvailableProjectIds(persistedState.pinnedProjectIds, availableIds).filter(
+      (projectId) => openSet.has(projectId),
+    ),
+  );
+  const normalizedOpenProjectIds = normalizeOpenProjectOrder(
+    openProjectIds,
+    pinnedSet,
+  );
+  const normalizedOpenSet = new Set(normalizedOpenProjectIds);
+
+  return {
+    workspaceId,
+    sessionRevision,
+    openProjectIds: normalizedOpenProjectIds,
+    pinnedProjectIds: normalizedOpenProjectIds.filter((projectId) =>
+      pinnedSet.has(projectId),
+    ),
+    closedProjectIds: projectIds.filter(
+      (projectId) => !normalizedOpenSet.has(projectId),
+    ),
+    recentlyClosedTabs: [],
+  };
+}
+
+export function toPersistedProjectTabsState(
+  state: ProjectTabsState,
+): PersistedProjectTabsState {
+  return {
+    openProjectIds: [...state.openProjectIds],
+    pinnedProjectIds: [...state.pinnedProjectIds],
   };
 }
 
@@ -46,29 +111,43 @@ export function synchronizeProjectTabsState(
   const availableIds = new Set(projectIds);
   const knownIds = new Set([
     ...state.openProjectIds,
+    ...state.closedProjectIds,
     ...state.recentlyClosedTabs.map((tab) => tab.projectId),
   ]);
   const openProjectIds = state.openProjectIds.filter((id) => availableIds.has(id));
+  let closedProjectIds = state.closedProjectIds.filter(
+    (id) => availableIds.has(id) && !openProjectIds.includes(id),
+  );
   for (const projectId of projectIds) {
     if (!knownIds.has(projectId)) openProjectIds.push(projectId);
   }
   if (availableIds.has(activeProjectId) && !openProjectIds.includes(activeProjectId)) {
     openProjectIds.push(activeProjectId);
+    closedProjectIds = closedProjectIds.filter((id) => id !== activeProjectId);
   }
 
   const openSet = new Set(openProjectIds);
+  closedProjectIds = closedProjectIds.filter((id) => !openSet.has(id));
   const pinnedSet = new Set(
     state.pinnedProjectIds.filter((id) => availableIds.has(id) && openSet.has(id)),
   );
   const nextOpenProjectIds = normalizeOpenProjectOrder(openProjectIds, pinnedSet);
   const nextPinnedProjectIds = nextOpenProjectIds.filter((id) => pinnedSet.has(id));
   const nextOpenSet = new Set(nextOpenProjectIds);
+  const nextClosedProjectIds = projectIds.filter(
+    (projectId) =>
+      closedProjectIds.includes(projectId) && !nextOpenSet.has(projectId),
+  );
   const nextRecentlyClosedTabs = state.recentlyClosedTabs.filter(
-    (tab) => availableIds.has(tab.projectId) && !nextOpenSet.has(tab.projectId),
+    (tab) =>
+      availableIds.has(tab.projectId) &&
+      nextClosedProjectIds.includes(tab.projectId) &&
+      !nextOpenSet.has(tab.projectId),
   );
   if (
     arraysEqual(state.openProjectIds, nextOpenProjectIds) &&
     arraysEqual(state.pinnedProjectIds, nextPinnedProjectIds) &&
+    arraysEqual(state.closedProjectIds, nextClosedProjectIds) &&
     recentlyClosedTabsEqual(state.recentlyClosedTabs, nextRecentlyClosedTabs)
   ) {
     return state;
@@ -79,6 +158,7 @@ export function synchronizeProjectTabsState(
     sessionRevision,
     openProjectIds: nextOpenProjectIds,
     pinnedProjectIds: nextPinnedProjectIds,
+    closedProjectIds: nextClosedProjectIds,
     recentlyClosedTabs: nextRecentlyClosedTabs,
   };
 }
@@ -203,6 +283,10 @@ export function closeProjectTab(
     state: {
       ...state,
       openProjectIds,
+      closedProjectIds: [
+        ...state.closedProjectIds.filter((id) => id !== projectId),
+        projectId,
+      ],
       recentlyClosedTabs: [
         { projectId, unpinnedIndex },
         ...state.recentlyClosedTabs.filter((tab) => tab.projectId !== projectId),
@@ -242,6 +326,9 @@ export function reopenLastProjectTab(
     state: {
       ...state,
       openProjectIds: [...pinnedProjectIds, ...unpinnedProjectIds],
+      closedProjectIds: state.closedProjectIds.filter(
+        (projectId) => projectId !== recentlyClosedTab.projectId,
+      ),
       recentlyClosedTabs: state.recentlyClosedTabs.filter(
         (tab) => tab.projectId !== recentlyClosedTab.projectId,
       ),
@@ -263,6 +350,21 @@ export function resolveProjectTabNavigation(
   const offset = key === 'ArrowLeft' ? -1 : 1;
   const nextIndex = (currentIndex + offset + openProjectIds.length) % openProjectIds.length;
   return openProjectIds[nextIndex]!;
+}
+
+function uniqueAvailableProjectIds(
+  projectIds: readonly string[],
+  availableIds: ReadonlySet<string>,
+): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const projectId of projectIds) {
+    if (availableIds.has(projectId) && !seen.has(projectId)) {
+      seen.add(projectId);
+      result.push(projectId);
+    }
+  }
+  return result;
 }
 
 function normalizeOpenProjectOrder(
