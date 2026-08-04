@@ -65,3 +65,5 @@ jobs:
           git add -A
           git commit -m "Projectタブの表示状態を保存・復元"
           git push origin HEAD:feat/project-tab-persistence
+
+# trigger retry after PR creation
