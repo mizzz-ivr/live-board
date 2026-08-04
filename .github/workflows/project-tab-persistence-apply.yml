@@ -27,15 +27,31 @@ jobs:
           python .github/scripts/apply_project_tab_persistence.py
           python - <<'PY'
           from pathlib import Path
-          path = Path('packages/persistence/src/archive.ts')
-          content = path.read_text(encoding='utf-8')
-          old = '  editorState?: LiveboardEditorState;'
-          if content.count(old) != 2:
+
+          archive_path = Path('packages/persistence/src/archive.ts')
+          archive = archive_path.read_text(encoding='utf-8')
+          optional_type = '  editorState?: LiveboardEditorState;'
+          if archive.count(optional_type) != 2:
               raise RuntimeError('editorState optional type target mismatch')
-          path.write_text(
-              content.replace(old, '  editorState?: LiveboardEditorState | undefined;'),
+          archive_path.write_text(
+              archive.replace(
+                  optional_type,
+                  '  editorState?: LiveboardEditorState | undefined;',
+              ),
               encoding='utf-8',
           )
+
+          editor_state_path = Path('packages/persistence/src/editor-state.ts')
+          editor_state = editor_state_path.read_text(encoding='utf-8')
+          replacements = {
+              '  openProjectIds: string[];': '  readonly openProjectIds: readonly string[];',
+              '  pinnedProjectIds: string[];': '  readonly pinnedProjectIds: readonly string[];',
+          }
+          for old, new in replacements.items():
+              if editor_state.count(old) != 1:
+                  raise RuntimeError(f'editor state type target mismatch: {old}')
+              editor_state = editor_state.replace(old, new)
+          editor_state_path.write_text(editor_state, encoding='utf-8')
           PY
 
       - name: Remove temporary implementation files
