@@ -53,6 +53,18 @@ Persistence層で次を正規化します。
 
 Projectタブ数の上限はWorkspace側の上限と同じ1,024件です。
 
+## 閉じたProjectの再オープン
+
+直近のClose順と元の通常タブindexは保存しません。ただし、再読込後も閉じたProjectへアクセスできる必要があります。
+
+- `openProjectIds`に存在しないProjectから`closedProjectIds`をWorkspace順で再構築
+- 同一Rendererセッションの`recentlyClosedTabs`がある場合は従来どおり直近のタブを優先
+- `recentlyClosedTabs`が空の場合は`closedProjectIds`からWorkspace順で復元候補を選択
+- 既存の「閉じたタブを復元」操作で再オープン
+- 復元後は対象Projectをアクティブにし、保存状態から除外
+
+これにより、閉じた状態は永続化しつつ、閉じたProjectがUIから到達不能になることを防ぎます。
+
 ## Workspace複製・インポート
 
 Workspace複製とインポートではProject IDが再採番されるため、`openProjectIds`と`pinnedProjectIds`も同じIDマップで変換します。元Bundleは変更しません。
@@ -81,5 +93,6 @@ Workspace複製とインポートではProject IDが再採番されるため、`
 - アクティブProjectを必ず開く
 - Workspace複製時にProjectタブIDを再採番する
 - 保存状態から復元後、新規Projectだけを通常タブ末尾へ開く
+- 再読込後も保存済みの閉じたProjectを再オープンできる
 - 直近に閉じたタブ履歴をファイルへ保存しない
 - 既存のProject追加・複製・削除・名前変更・Undo／Redo・タブ操作・OBS同期を回帰させない
