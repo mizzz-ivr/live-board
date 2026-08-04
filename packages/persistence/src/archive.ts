@@ -23,6 +23,11 @@ import {
   createStoredZip,
   readStoredZip,
 } from './zip.js';
+import {
+  normalizeLiveboardEditorState,
+  remapLiveboardEditorState,
+  type LiveboardEditorState,
+} from './editor-state.js';
 
 export const LIVEBOARD_ARCHIVE_FORMAT = 'liveboard' as const;
 export const LIVEBOARD_ARCHIVE_SCHEMA_VERSION = 1 as const;
@@ -59,11 +64,13 @@ export interface LiveboardManifestV1 {
   savedAt: string;
   workspace: Workspace;
   assetLibraries: Record<string, PersistedProjectAssetLibrary>;
+  editorState?: LiveboardEditorState | undefined;
 }
 
 export interface LiveboardBundle {
   workspace: Workspace;
   assetLibraries: Record<string, ProjectAssetLibrary>;
+  editorState?: LiveboardEditorState | undefined;
 }
 
 export interface CreateLiveboardArchiveOptions extends LiveboardBundle {
@@ -176,6 +183,7 @@ export function createLiveboardArchive(
     savedAt: normalizeTimestamp(savedAt, 'savedAt'),
     workspace,
     assetLibraries: persistedLibraries,
+    editorState: normalizeLiveboardEditorState(options.editorState, workspace),
   };
   const manifestBytes = encodeUtf8(JSON.stringify(manifest));
   if (manifestBytes.byteLength > MAX_MANIFEST_BYTES) {
@@ -225,6 +233,10 @@ export function loadLiveboardArchive(
   const bundle: LiveboardBundle = {
     workspace: cloneJson(manifest.workspace),
     assetLibraries,
+    editorState:
+      manifest.editorState === undefined
+        ? undefined
+        : cloneJson(manifest.editorState),
   };
   const collides = options.existingWorkspaceIds?.has(bundle.workspace.id) ?? false;
   let loadedBundle = bundle;
@@ -333,9 +345,14 @@ export function duplicateLiveboardBundle(
   for (const project of workspace.projects) {
     assetLibraries[project.id] ??= createProjectAssetLibrary();
   }
+  const editorState = remapLiveboardEditorState(
+    bundle.editorState,
+    projectIdMap,
+    workspace,
+  );
   validateWorkspace(workspace);
   validateAssetReferences(workspace, assetLibraries);
-  return { workspace, assetLibraries };
+  return { workspace, assetLibraries, editorState };
 }
 
 export function migrateManifest(input: unknown): {
@@ -364,6 +381,7 @@ export function migrateManifest(input: unknown): {
         savedAt: typeof input.savedAt === 'string' ? input.savedAt : createdAt,
         workspace,
         assetLibraries: input.assetLibraries ?? {},
+        editorState: input.editorState,
       },
       migratedFromVersion: 0,
     };
@@ -393,6 +411,7 @@ function parseManifestV1(input: unknown): LiveboardManifestV1 {
   const savedAt = normalizeTimestamp(input.savedAt, 'savedAt');
   const workspace = cloneJson(input.workspace as Workspace);
   const assetLibraries = parsePersistedLibraries(input.assetLibraries);
+  const editorState = normalizeLiveboardEditorState(input.editorState, workspace);
   return {
     format: LIVEBOARD_ARCHIVE_FORMAT,
     schemaVersion: LIVEBOARD_ARCHIVE_SCHEMA_VERSION,
@@ -402,6 +421,7 @@ function parseManifestV1(input: unknown): LiveboardManifestV1 {
     savedAt,
     workspace,
     assetLibraries,
+    editorState,
   };
 }
 

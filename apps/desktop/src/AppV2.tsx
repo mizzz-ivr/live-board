@@ -182,8 +182,10 @@ export function AppV2() {
   const persistence = useWorkspacePersistence({
     commandState,
     assetLibraries,
+    projectTabsState,
     setCommandState,
     setAssetLibraries,
+    setProjectTabsState,
   });
 
   const workspace = commandState.workspace;
