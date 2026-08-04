@@ -301,11 +301,12 @@ export function reopenLastProjectTab(
   projectIds: readonly string[],
 ): { state: ProjectTabsState; reopenedProjectId: string | null } {
   const availableIds = new Set(projectIds);
-  const recentlyClosedTab = state.recentlyClosedTabs.find(
-    (tab) =>
-      availableIds.has(tab.projectId) &&
-      !state.openProjectIds.includes(tab.projectId),
-  );
+  const recentlyClosedTab =
+    state.recentlyClosedTabs.find(
+      (tab) =>
+        availableIds.has(tab.projectId) &&
+        !state.openProjectIds.includes(tab.projectId),
+    ) ?? restoreClosedProjectTabCandidate(state, projectIds);
   if (recentlyClosedTab === undefined) {
     return { state, reopenedProjectId: null };
   }
@@ -350,6 +351,26 @@ export function resolveProjectTabNavigation(
   const offset = key === 'ArrowLeft' ? -1 : 1;
   const nextIndex = (currentIndex + offset + openProjectIds.length) % openProjectIds.length;
   return openProjectIds[nextIndex]!;
+}
+
+function restoreClosedProjectTabCandidate(
+  state: ProjectTabsState,
+  projectIds: readonly string[],
+): RecentlyClosedProjectTab | undefined {
+  const projectId = projectIds.find(
+    (candidate) =>
+      state.closedProjectIds.includes(candidate) &&
+      !state.openProjectIds.includes(candidate),
+  );
+  if (projectId === undefined) return undefined;
+
+  const unpinnedProjectIds = projectIds.filter(
+    (candidate) => !state.pinnedProjectIds.includes(candidate),
+  );
+  return {
+    projectId,
+    unpinnedIndex: Math.max(0, unpinnedProjectIds.indexOf(projectId)),
+  };
 }
 
 function uniqueAvailableProjectIds(

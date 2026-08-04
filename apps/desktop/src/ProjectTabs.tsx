@@ -72,7 +72,8 @@ export function ProjectTabs({
     const project = projectsById.get(projectId);
     return project === undefined ? [] : [project];
   });
-  const canReopen = tabs.recentlyClosedTabs.length > 0;
+  const canReopen =
+    tabs.recentlyClosedTabs.length > 0 || tabs.closedProjectIds.length > 0;
 
   function selectAndFocus(projectId: string): void {
     onSelect(projectId);
