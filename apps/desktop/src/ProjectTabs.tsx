@@ -21,6 +21,7 @@ import {
   type ProjectTabDropPosition,
   type ProjectTabsState,
 } from './project-tabs-model';
+import { ProjectTabShortcutHelpDialog } from './ProjectTabShortcutHelpDialog';
 import {
   isEditableProjectTabShortcutTarget,
   resolveProjectTabShortcut,
@@ -73,12 +74,35 @@ export function ProjectTabs({
   const tabRefs = useRef(new Map<string, HTMLButtonElement>());
   const draggedProjectIdRef = useRef<string | null>(null);
   const [dropTarget, setDropTarget] = useState<ProjectTabDropTarget | null>(null);
+  const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
+  const shortcutHelpButtonRef = useRef<HTMLButtonElement>(null);
+  const shortcutHelpReturnFocusRef = useRef<HTMLElement | null>(null);
   const openProjects = tabs.openProjectIds.flatMap((projectId) => {
     const project = projectsById.get(projectId);
     return project === undefined ? [] : [project];
   });
   const canReopen =
     tabs.recentlyClosedTabs.length > 0 || tabs.closedProjectIds.length > 0;
+
+  function openShortcutHelp(): void {
+    const activeElement = document.activeElement;
+    shortcutHelpReturnFocusRef.current =
+      activeElement instanceof HTMLElement &&
+      activeElement !== document.body &&
+      activeElement !== document.documentElement
+        ? activeElement
+        : shortcutHelpButtonRef.current;
+    setShortcutHelpOpen(true);
+  }
+
+  function closeShortcutHelp(): void {
+    setShortcutHelpOpen(false);
+    const returnFocus = shortcutHelpReturnFocusRef.current;
+    window.requestAnimationFrame(() => {
+      if (returnFocus?.isConnected) returnFocus.focus();
+      else shortcutHelpButtonRef.current?.focus();
+    });
+  }
 
   function selectAndFocus(projectId: string): void {
     onSelect(projectId);
@@ -141,6 +165,14 @@ export function ProjectTabs({
       event.preventDefault();
       event.stopPropagation();
 
+      if (action === 'show-help') {
+        if (shortcutHelpOpen) closeShortcutHelp();
+        else openShortcutHelp();
+        return;
+      }
+
+      if (shortcutHelpOpen) return;
+
       if (action === 'close-active') {
         const result = closeProjectTab(tabs, activeProjectId, activeProjectId);
         onTabsChange(result.state);
@@ -174,6 +206,7 @@ export function ProjectTabs({
     onTabsChange,
     projectIds,
     projectsById,
+    shortcutHelpOpen,
     tabs,
   ]);
 
@@ -403,10 +436,23 @@ export function ProjectTabs({
         >
           閉じたタブを復元
         </button>
+        <button
+          ref={shortcutHelpButtonRef}
+          type="button"
+          aria-label="キーボードショートカットを表示"
+          title="?"
+          onClick={openShortcutHelp}
+        >
+          ?
+        </button>
         <button type="button" onClick={onCreate} aria-label="プロジェクトを追加">
           ＋
         </button>
       </div>
+      <ProjectTabShortcutHelpDialog
+        open={shortcutHelpOpen}
+        onRequestClose={closeShortcutHelp}
+      />
     </div>
   );
 }
