@@ -201,3 +201,44 @@ test('Project名を変更し、Project操作でUndo・Redoできる', async ({ p
   await expect(renamedTab).toBeVisible();
   await expect(renamedTab).toHaveAttribute('aria-selected', 'true');
 });
+
+test('ショートカットでProjectタブを名前変更・Close・復元できる', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas-surface')).toBeVisible();
+
+  const tablist = page.getByRole('tablist', { name: 'プロジェクト' });
+  await page.getByRole('button', { name: 'プロジェクトを追加' }).click();
+  await expect(tablist.getByRole('tab')).toHaveCount(2);
+
+  page.once('dialog', async (dialog) => dialog.accept('ショートカットProject'));
+  await page.keyboard.press('F2');
+  const renamedTab = tablist.getByRole('tab', { name: /ショートカットProject/ });
+  await expect(renamedTab).toHaveAttribute('aria-selected', 'true');
+
+  await page.keyboard.press('Control+W');
+  await expect(tablist.getByRole('tab')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: '閉じたタブを復元' })).toBeEnabled();
+
+  await page.keyboard.press('Control+Shift+T');
+  await expect(tablist.getByRole('tab')).toHaveCount(2);
+  await expect(renamedTab).toHaveAttribute('aria-selected', 'true');
+
+  await page.getByRole('button', {
+    name: 'ショートカットProjectのタブをピン留め',
+  }).click();
+  await page.keyboard.press('Control+W');
+  await expect(tablist.getByRole('tab')).toHaveCount(2);
+
+  await page.evaluate(() => {
+    const input = document.createElement('input');
+    input.dataset.testid = 'project-shortcut-editable';
+    document.body.append(input);
+  });
+  await page.getByTestId('project-shortcut-editable').dispatchEvent('keydown', {
+    key: 'w',
+    ctrlKey: true,
+    bubbles: true,
+  });
+  await expect(tablist.getByRole('tab')).toHaveCount(2);
+});
+
