@@ -1,5 +1,6 @@
 import type { Project } from '@live-board/domain';
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -20,6 +21,10 @@ import {
   type ProjectTabDropPosition,
   type ProjectTabsState,
 } from './project-tabs-model';
+import {
+  isEditableProjectTabShortcutTarget,
+  resolveProjectTabShortcut,
+} from './project-tab-shortcuts';
 import './project-tabs.css';
 
 export interface ProjectTabsProps {
@@ -117,6 +122,60 @@ export function ProjectTabs({
     }
     onRename(project.id, normalizedName);
   }
+
+  useEffect(() => {
+    function handleWindowKeyDown(event: globalThis.KeyboardEvent): void {
+      const action = resolveProjectTabShortcut({
+        key: event.key,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        shiftKey: event.shiftKey,
+        altKey: event.altKey,
+        repeat: event.repeat,
+        isComposing: event.isComposing,
+        defaultPrevented: event.defaultPrevented,
+        editableTarget: isEditableProjectTabShortcutTarget(event.target),
+      });
+      if (action === null) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (action === 'close-active') {
+        const result = closeProjectTab(tabs, activeProjectId, activeProjectId);
+        onTabsChange(result.state);
+        if (result.nextActiveProjectId !== activeProjectId) {
+          onSelect(result.nextActiveProjectId);
+          focusTab(result.nextActiveProjectId);
+        }
+        return;
+      }
+
+      if (action === 'reopen-last') {
+        const result = reopenLastProjectTab(tabs, projectIds);
+        onTabsChange(result.state);
+        if (result.reopenedProjectId !== null) {
+          onSelect(result.reopenedProjectId);
+          focusTab(result.reopenedProjectId);
+        }
+        return;
+      }
+
+      const activeProject = projectsById.get(activeProjectId);
+      if (activeProject !== undefined) rename(activeProject);
+    }
+
+    window.addEventListener('keydown', handleWindowKeyDown, true);
+    return () => window.removeEventListener('keydown', handleWindowKeyDown, true);
+  }, [
+    activeProjectId,
+    onRename,
+    onSelect,
+    onTabsChange,
+    projectIds,
+    projectsById,
+    tabs,
+  ]);
 
   function handleTabKeyDown(
     event: KeyboardEvent<HTMLButtonElement>,
@@ -260,6 +319,7 @@ export function ProjectTabs({
                 type="button"
                 className="project-tab-rename"
                 aria-label={`${project.name}の名前を変更`}
+                title="F2"
                 onClick={() => rename(project)}
               >
                 名前
@@ -299,7 +359,11 @@ export function ProjectTabs({
                 type="button"
                 className="project-tab-close"
                 aria-label={`${project.name}のタブを閉じる`}
-                title={pinned ? 'ピン留めを解除すると閉じられます' : undefined}
+                title={
+                  pinned
+                    ? 'ピン留めを解除すると閉じられます（Ctrl/Cmd+W）'
+                    : 'Ctrl/Cmd+W'
+                }
                 disabled={tabs.openProjectIds.length <= 1 || pinned}
                 onClick={() => close(project.id)}
               >
@@ -331,7 +395,12 @@ export function ProjectTabs({
         >
           操作をやり直す
         </button>
-        <button type="button" onClick={reopen} disabled={!canReopen}>
+        <button
+          type="button"
+          title="Ctrl/Cmd+Shift+T"
+          onClick={reopen}
+          disabled={!canReopen}
+        >
           閉じたタブを復元
         </button>
         <button type="button" onClick={onCreate} aria-label="プロジェクトを追加">
