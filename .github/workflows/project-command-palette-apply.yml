@@ -24,9 +24,13 @@ jobs:
       - name: Apply command palette implementation
         run: python .github/scripts/apply-project-command-palette.py
 
+      - name: Fix command palette search test
+        run: python .github/scripts/fix-project-command-palette-test.py
+
       - name: Remove temporary implementation files
         run: |
           rm .github/scripts/apply-project-command-palette.py
+          rm .github/scripts/fix-project-command-palette-test.py
           rm .github/workflows/project-command-palette-apply.yml
 
       - name: Setup pnpm
