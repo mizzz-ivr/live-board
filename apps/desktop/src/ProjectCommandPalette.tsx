@@ -189,23 +189,21 @@ export function ProjectCommandPalette({
                 aria-selected={index === selectedIndex}
                 aria-disabled={command.disabled}
                 data-selected={index === selectedIndex ? 'true' : 'false'}
+                onMouseDown={(event) => event.preventDefault()}
+                onMouseMove={() => {
+                  if (!command.disabled) setSelectedIndex(index);
+                }}
+                onClick={() => {
+                  if (!command.disabled) onExecute(command);
+                }}
               >
-                <button
-                  type="button"
-                  disabled={command.disabled}
-                  onMouseMove={() => {
-                    if (!command.disabled) setSelectedIndex(index);
-                  }}
-                  onClick={() => onExecute(command)}
-                >
-                  <span className="project-command-palette-command-copy">
-                    <strong>{command.label}</strong>
-                    <span>{command.description}</span>
-                  </span>
-                  <span className="project-command-palette-command-group">
-                    {command.group}
-                  </span>
-                </button>
+                <span className="project-command-palette-command-copy">
+                  <strong>{command.label}</strong>
+                  <span>{command.description}</span>
+                </span>
+                <span className="project-command-palette-command-group">
+                  {command.group}
+                </span>
               </li>
             ))}
           </ul>
