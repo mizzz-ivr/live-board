@@ -15,12 +15,18 @@ import {
   isProjectTabPinned,
   moveProjectTab,
   moveProjectTabByOffset,
+  openProjectTab,
   reopenLastProjectTab,
   resolveProjectTabNavigation,
   toggleProjectTabPin,
   type ProjectTabDropPosition,
   type ProjectTabsState,
 } from './project-tabs-model';
+import { ProjectCommandPalette } from './ProjectCommandPalette';
+import {
+  createProjectTabCommands,
+  type ProjectTabCommand,
+} from './project-command-palette-model';
 import { ProjectTabShortcutHelpDialog } from './ProjectTabShortcutHelpDialog';
 import {
   isEditableProjectTabShortcutTarget,
@@ -77,12 +83,53 @@ export function ProjectTabs({
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
   const shortcutHelpButtonRef = useRef<HTMLButtonElement>(null);
   const shortcutHelpReturnFocusRef = useRef<HTMLElement | null>(null);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const commandPaletteButtonRef = useRef<HTMLButtonElement>(null);
+  const commandPaletteReturnFocusRef = useRef<HTMLElement | null>(null);
   const openProjects = tabs.openProjectIds.flatMap((projectId) => {
     const project = projectsById.get(projectId);
     return project === undefined ? [] : [project];
   });
   const canReopen =
     tabs.recentlyClosedTabs.length > 0 || tabs.closedProjectIds.length > 0;
+  const commandPaletteCommands = useMemo(
+    () =>
+      createProjectTabCommands({
+        projects,
+        activeProjectId,
+        tabs,
+        canUndoProjectOperation,
+        canRedoProjectOperation,
+      }),
+    [
+      activeProjectId,
+      canRedoProjectOperation,
+      canUndoProjectOperation,
+      projects,
+      tabs,
+    ],
+  );
+
+  function openCommandPalette(): void {
+    const activeElement = document.activeElement;
+    commandPaletteReturnFocusRef.current =
+      activeElement instanceof HTMLElement
+      && activeElement !== document.body
+      && activeElement !== document.documentElement
+        ? activeElement
+        : commandPaletteButtonRef.current;
+    setShortcutHelpOpen(false);
+    setCommandPaletteOpen(true);
+  }
+
+  function closeCommandPalette(): void {
+    setCommandPaletteOpen(false);
+    const returnFocus = commandPaletteReturnFocusRef.current;
+    window.requestAnimationFrame(() => {
+      if (returnFocus?.isConnected) returnFocus.focus();
+      else commandPaletteButtonRef.current?.focus();
+    });
+  }
 
   function openShortcutHelp(): void {
     const activeElement = document.activeElement;
@@ -92,6 +139,7 @@ export function ProjectTabs({
       activeElement !== document.documentElement
         ? activeElement
         : shortcutHelpButtonRef.current;
+    setCommandPaletteOpen(false);
     setShortcutHelpOpen(true);
   }
 
@@ -147,6 +195,60 @@ export function ProjectTabs({
     onRename(project.id, normalizedName);
   }
 
+  function executeCommandPaletteCommand(command: ProjectTabCommand): void {
+    if (command.disabled) return;
+
+    setCommandPaletteOpen(false);
+    const returnFocus = commandPaletteReturnFocusRef.current;
+    window.requestAnimationFrame(() => {
+      if (returnFocus?.isConnected) returnFocus.focus();
+      else commandPaletteButtonRef.current?.focus();
+
+      switch (command.kind) {
+        case 'select-project': {
+          const projectId = command.projectId;
+          if (projectId === undefined) return;
+          onTabsChange((current) => openProjectTab(current, projectId));
+          onSelect(projectId);
+          focusTab(projectId);
+          return;
+        }
+        case 'create-project':
+          onCreate();
+          return;
+        case 'duplicate-active':
+          onDuplicate(activeProjectId);
+          return;
+        case 'rename-active': {
+          const activeProject = projectsById.get(activeProjectId);
+          if (activeProject !== undefined) rename(activeProject);
+          return;
+        }
+        case 'delete-active':
+          onDelete(activeProjectId);
+          return;
+        case 'toggle-pin-active':
+          togglePin(activeProjectId);
+          return;
+        case 'close-active':
+          close(activeProjectId);
+          return;
+        case 'reopen-last':
+          reopen();
+          return;
+        case 'undo-project-operation':
+          onUndoProjectOperation();
+          return;
+        case 'redo-project-operation':
+          onRedoProjectOperation();
+          return;
+        case 'show-shortcut-help':
+          shortcutHelpReturnFocusRef.current = commandPaletteButtonRef.current;
+          setShortcutHelpOpen(true);
+      }
+    });
+  }
+
   useEffect(() => {
     function handleWindowKeyDown(event: globalThis.KeyboardEvent): void {
       const action = resolveProjectTabShortcut({
@@ -164,6 +266,14 @@ export function ProjectTabs({
 
       event.preventDefault();
       event.stopPropagation();
+
+      if (action === 'show-command-palette') {
+        if (commandPaletteOpen) closeCommandPalette();
+        else openCommandPalette();
+        return;
+      }
+
+      if (commandPaletteOpen) return;
 
       if (action === 'show-help') {
         if (shortcutHelpOpen) closeShortcutHelp();
@@ -201,6 +311,7 @@ export function ProjectTabs({
     return () => window.removeEventListener('keydown', handleWindowKeyDown, true);
   }, [
     activeProjectId,
+    commandPaletteOpen,
     onRename,
     onSelect,
     onTabsChange,
@@ -437,6 +548,15 @@ export function ProjectTabs({
           閉じたタブを復元
         </button>
         <button
+          ref={commandPaletteButtonRef}
+          type="button"
+          aria-label="コマンドパレットを表示"
+          title="Ctrl/Cmd+K"
+          onClick={openCommandPalette}
+        >
+          コマンド
+        </button>
+        <button
           ref={shortcutHelpButtonRef}
           type="button"
           aria-label="キーボードショートカットを表示"
@@ -449,6 +569,12 @@ export function ProjectTabs({
           ＋
         </button>
       </div>
+      <ProjectCommandPalette
+        open={commandPaletteOpen}
+        commands={commandPaletteCommands}
+        onRequestClose={closeCommandPalette}
+        onExecute={executeCommandPaletteCommand}
+      />
       <ProjectTabShortcutHelpDialog
         open={shortcutHelpOpen}
         onRequestClose={closeShortcutHelp}

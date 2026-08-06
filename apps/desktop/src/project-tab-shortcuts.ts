@@ -2,6 +2,7 @@ export type ProjectTabShortcutAction =
   | 'close-active'
   | 'reopen-last'
   | 'rename-active'
+  | 'show-command-palette'
   | 'show-help';
 
 export interface ProjectTabShortcutInput {
@@ -70,6 +71,16 @@ const GLOBAL_PROJECT_TAB_SHORTCUTS: readonly GlobalProjectTabShortcutBinding[] =
     eventKeys: ['t'],
     primaryModifier: 'single',
     shift: 'required',
+  },
+  {
+    id: 'show-command-palette',
+    action: 'show-command-palette',
+    label: 'コマンドパレットを表示',
+    keys: ['Ctrl/Cmd', 'K'],
+    description: 'Project切り替えや主要操作を検索実行します。',
+    eventKeys: ['k'],
+    primaryModifier: 'single',
+    shift: 'forbidden',
   },
   {
     id: 'show-help',
