@@ -256,6 +256,26 @@ export function moveProjectTabByOffset(
   );
 }
 
+export function openProjectTab(
+  state: ProjectTabsState,
+  projectId: string,
+): ProjectTabsState {
+  if (state.openProjectIds.includes(projectId)) return state;
+
+  const knownClosedProject = state.closedProjectIds.includes(projectId)
+    || state.recentlyClosedTabs.some((tab) => tab.projectId === projectId);
+  if (!knownClosedProject) return state;
+
+  return {
+    ...state,
+    openProjectIds: [...state.openProjectIds, projectId],
+    closedProjectIds: state.closedProjectIds.filter((id) => id !== projectId),
+    recentlyClosedTabs: state.recentlyClosedTabs.filter(
+      (tab) => tab.projectId !== projectId,
+    ),
+  };
+}
+
 export function closeProjectTab(
   state: ProjectTabsState,
   projectId: string,
