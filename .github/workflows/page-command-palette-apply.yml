@@ -27,10 +27,14 @@ jobs:
       - name: Apply page command palette
         run: python .github/scripts/apply-page-command-palette.py
 
+      - name: Fix command payload optional types
+        run: python .github/scripts/fix-page-command-palette-types.py
+
       - name: Remove temporary implementation files
         run: |
           rm .github/scripts/apply-page-rename-domain.py
           rm .github/scripts/apply-page-command-palette.py
+          rm .github/scripts/fix-page-command-palette-types.py
           rm .github/workflows/page-command-palette-apply.yml
 
       - name: Setup pnpm
