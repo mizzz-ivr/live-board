@@ -30,11 +30,15 @@ jobs:
       - name: Fix command payload optional types
         run: python .github/scripts/fix-page-command-palette-types.py
 
+      - name: Fix command palette search test
+        run: python .github/scripts/fix-page-command-palette-search-test.py
+
       - name: Remove temporary implementation files
         run: |
           rm .github/scripts/apply-page-rename-domain.py
           rm .github/scripts/apply-page-command-palette.py
           rm .github/scripts/fix-page-command-palette-types.py
+          rm .github/scripts/fix-page-command-palette-search-test.py
           rm .github/workflows/page-command-palette-apply.yml
 
       - name: Setup pnpm
