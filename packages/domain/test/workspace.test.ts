@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DomainError,
+  applyProjectCommand,
   canRedoProject,
   canUndoProject,
   createAddPageCommand,
@@ -10,6 +11,7 @@ import {
   createEmptyWorkspace,
   createMovePageCommand,
   createPage,
+  createRenamePageCommand,
   createProject,
   createSelectBroadcastPageCommand,
   createSelectEditPageCommand,
@@ -100,6 +102,59 @@ describe('workspace domain', () => {
       'page-2',
     ]);
     expect(project.activeEditPageId).toBe('page-3');
+  });
+
+  it('Page名変更を正規化して履歴へ記録し、Undo・Redoできる', () => {
+    let state = createStateWithPages(['page-1', 'page-2']);
+    state = dispatchProjectCommand(
+      state,
+      createRenamePageCommand(
+        PROJECT_ID,
+        'page-2',
+        '  待機画面  ',
+        metadata('rename-page-2'),
+      ),
+    );
+
+    expect(state.workspace.projects[0]?.pages[1]?.name).toBe('待機画面');
+    state = undoProjectCommand(state, PROJECT_ID);
+    expect(state.workspace.projects[0]?.pages[1]?.name).toBe('Page 2');
+    state = redoProjectCommand(state, PROJECT_ID);
+    expect(state.workspace.projects[0]?.pages[1]?.name).toBe('待機画面');
+  });
+
+  it('空または121文字以上のPage名変更を拒否する', () => {
+    expect(() =>
+      createRenamePageCommand(
+        PROJECT_ID,
+        'page-1',
+        '   ',
+        metadata('rename-page-empty'),
+      ),
+    ).toThrowError(DomainError);
+    expect(() =>
+      createRenamePageCommand(
+        PROJECT_ID,
+        'page-1',
+        'a'.repeat(121),
+        metadata('rename-page-long'),
+      ),
+    ).toThrowError(DomainError);
+  });
+
+  it('直接組み立てたPage名変更Commandでも不正名を拒否する', () => {
+    const state = createStateWithPages(['page-1']);
+
+    expect(() =>
+      applyProjectCommand(state.workspace, {
+        commandId: 'raw-rename-invalid',
+        type: 'page.rename',
+        scope: 'project',
+        targetId: PROJECT_ID,
+        payload: { pageId: 'page-1', name: '   ' },
+        createdAt: '2026-07-22T00:00:00.000Z',
+      }),
+    ).toThrowError(DomainError);
   });
 
   it('削除対象が編集・配信ページの場合は隣接ページへ切り替える', () => {

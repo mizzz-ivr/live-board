@@ -138,9 +138,9 @@ export function ProjectCommandPalette({
         <header className="project-command-palette-header">
           <div>
             <p className="project-command-palette-eyebrow">Command palette</p>
-            <h2 id="project-command-palette-title">Projectコマンド</h2>
+            <h2 id="project-command-palette-title">Project / Pageコマンド</h2>
             <p id="project-command-palette-description">
-              Projectの切り替えや主要操作を検索して実行します。
+              Project・Pageの切り替えや主要操作を検索して実行します。
             </p>
           </div>
           <kbd>Ctrl/Cmd + K</kbd>
@@ -160,7 +160,7 @@ export function ProjectCommandPalette({
                 ? undefined
                 : `project-command-option-${selectedCommand.id}`
             }
-            placeholder="Project名または操作を検索"
+            placeholder="Project・Page名または操作を検索"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
@@ -172,7 +172,7 @@ export function ProjectCommandPalette({
 
         {filteredCommands.length === 0 ? (
           <p className="project-command-palette-empty">
-            一致するProjectまたはコマンドがありません。
+            一致するProject・Pageまたはコマンドがありません。
           </p>
         ) : (
           <ul

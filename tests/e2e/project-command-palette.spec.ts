@@ -16,7 +16,7 @@ test('コマンドパレットで閉じたProjectを検索して開き、主要�
   await expect(tablist.getByRole('tab')).toHaveCount(1);
 
   await page.keyboard.press('Control+K');
-  const dialog = page.getByRole('dialog', { name: 'Projectコマンド' });
+  const dialog = page.getByRole('dialog', { name: 'Project / Pageコマンド' });
   const search = dialog.getByRole('combobox', { name: 'コマンドを検索' });
   await expect(dialog).toBeVisible();
   await expect(search).toBeFocused();
@@ -59,7 +59,7 @@ test('キーボード選択・無効候補・フォーカス復帰・背面シ�
   });
 
   await commandButton.click();
-  const dialog = page.getByRole('dialog', { name: 'Projectコマンド' });
+  const dialog = page.getByRole('dialog', { name: 'Project / Pageコマンド' });
   const search = dialog.getByRole('combobox', { name: 'コマンドを検索' });
   await search.fill('ピン留め');
   await page.keyboard.press('Enter');
@@ -96,6 +96,6 @@ test('キーボード選択・無効候補・フォーカス復帰・背面シ�
   await commandButton.click();
   await search.fill('存在しないコマンド');
   await expect(
-    dialog.getByText('一致するProjectまたはコマンドがありません。'),
+    dialog.getByText('一致するProject・Pageまたはコマンドがありません。'),
   ).toBeVisible();
 });
