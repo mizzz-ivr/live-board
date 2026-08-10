@@ -2,6 +2,7 @@ import {
   assertInsertIndex,
   assertMoveIndex,
   clonePage,
+  createPage,
   type Page,
   type PageId,
   type Project,
@@ -312,10 +313,16 @@ function renamePage(
   }
 
   const currentPage = project.pages[pageIndex]!;
-  if (currentPage.name === name) return project;
+  const normalizedName = name.trim();
+  if (currentPage.name === normalizedName) return project;
 
+  const renamedPage = createPage({
+    ...currentPage,
+    name: normalizedName,
+    updatedAt,
+  });
   const pages = [...project.pages];
-  pages[pageIndex] = { ...currentPage, name, updatedAt };
+  pages[pageIndex] = renamedPage;
   return { ...project, pages, updatedAt };
 }
 

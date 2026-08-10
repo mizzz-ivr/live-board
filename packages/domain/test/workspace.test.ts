@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DomainError,
+  applyProjectCommand,
   canRedoProject,
   canUndoProject,
   createAddPageCommand,
@@ -138,6 +139,21 @@ describe('workspace domain', () => {
         'a'.repeat(121),
         metadata('rename-page-long'),
       ),
+    ).toThrowError(DomainError);
+  });
+
+  it('直接組み立てたPage名変更Commandでも不正名を拒否する', () => {
+    const state = createStateWithPages(['page-1']);
+
+    expect(() =>
+      applyProjectCommand(state.workspace, {
+        commandId: 'raw-rename-invalid',
+        type: 'page.rename',
+        scope: 'project',
+        targetId: PROJECT_ID,
+        payload: { pageId: 'page-1', name: '   ' },
+        createdAt: '2026-07-22T00:00:00.000Z',
+      }),
     ).toThrowError(DomainError);
   });
 
