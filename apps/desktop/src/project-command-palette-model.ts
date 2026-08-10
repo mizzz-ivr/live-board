@@ -15,6 +15,15 @@ export type ProjectTabCommandKind =
   | 'reopen-last'
   | 'undo-project-operation'
   | 'redo-project-operation'
+  | 'select-page'
+  | 'create-page'
+  | 'duplicate-page'
+  | 'rename-page'
+  | 'delete-page'
+  | 'move-page-up'
+  | 'move-page-down'
+  | 'undo-page-operation'
+  | 'redo-page-operation'
   | 'show-shortcut-help';
 
 export interface ProjectTabCommand {
@@ -26,6 +35,8 @@ export interface ProjectTabCommand {
   readonly keywords: readonly string[];
   readonly disabled: boolean;
   readonly projectId?: string;
+  readonly pageId?: string | undefined;
+  readonly toIndex?: number | undefined;
 }
 
 export interface CreateProjectTabCommandsInput {
@@ -34,6 +45,8 @@ export interface CreateProjectTabCommandsInput {
   readonly tabs: ProjectTabsState;
   readonly canUndoProjectOperation: boolean;
   readonly canRedoProjectOperation: boolean;
+  readonly canUndoPageOperation: boolean;
+  readonly canRedoPageOperation: boolean;
 }
 
 export function createProjectTabCommands({
@@ -42,12 +55,18 @@ export function createProjectTabCommands({
   tabs,
   canUndoProjectOperation,
   canRedoProjectOperation,
+  canUndoPageOperation,
+  canRedoPageOperation,
 }: CreateProjectTabCommandsInput): ProjectTabCommand[] {
   const activeProject = projects.find((project) => project.id === activeProjectId);
   const activePinned = isProjectTabPinned(tabs, activeProjectId);
   const canCloseActive = tabs.openProjectIds.length > 1 && !activePinned;
   const canReopen =
     tabs.recentlyClosedTabs.length > 0 || tabs.closedProjectIds.length > 0;
+  const activePages = activeProject?.pages ?? [];
+  const activePageId = activeProject?.activeEditPageId ?? '';
+  const activePageIndex = activePages.findIndex((page) => page.id === activePageId);
+  const activePage = activePages[activePageIndex];
 
   const projectCommands = projects.map((project): ProjectTabCommand => {
     const open = tabs.openProjectIds.includes(project.id);
@@ -77,7 +96,35 @@ export function createProjectTabCommands({
     };
   });
 
+  const pageCommands = activePages.map((page): ProjectTabCommand => {
+    const active = page.id === activePageId;
+    const broadcasting = page.id === activeProject?.activeBroadcastPageId;
+    return {
+      id: `select-page:${page.id}`,
+      kind: 'select-page',
+      group: 'Pageを開く',
+      label: page.name,
+      description: active
+        ? '現在編集中のPageです。'
+        : broadcasting
+          ? '配信中のPageを編集対象へ切り替えます。'
+          : '編集対象Pageへ切り替えます。',
+      keywords: [
+        'page',
+        'ページ',
+        '切り替え',
+        '開く',
+        active ? '編集中' : '待機中',
+        broadcasting ? '配信中' : '',
+        page.name,
+      ],
+      disabled: false,
+      pageId: page.id,
+    };
+  });
+
   const activeName = activeProject?.name ?? 'Project';
+  const activePageName = activePage?.name ?? 'Page';
   const operationCommands: ProjectTabCommand[] = [
     {
       id: 'create-project',
@@ -178,6 +225,99 @@ export function createProjectTabCommands({
       disabled: !canRedoProjectOperation,
     },
     {
+      id: 'create-page',
+      kind: 'create-page',
+      group: 'Page操作',
+      label: '新しいPageを作成',
+      description: `${activeName}へ空のPageを追加して編集対象にします。`,
+      keywords: ['page', 'ページ', '新規', '作成', '追加', activeName],
+      disabled: activeProject === undefined,
+    },
+    {
+      id: 'duplicate-page',
+      kind: 'duplicate-page',
+      group: 'Page操作',
+      label: '編集中Pageを複製',
+      description: `${activePageName}を複製し、複製先を編集対象にします。`,
+      keywords: ['page', 'ページ', '複製', 'コピー', 'duplicate', activePageName],
+      disabled: activePage === undefined,
+      pageId: activePage?.id,
+    },
+    {
+      id: 'rename-page',
+      kind: 'rename-page',
+      group: 'Page操作',
+      label: '編集中Page名を変更',
+      description: `${activePageName}の名前変更ダイアログを開きます。`,
+      keywords: ['page', 'ページ', '名前', '変更', 'rename', activePageName],
+      disabled: activePage === undefined,
+      pageId: activePage?.id,
+    },
+    {
+      id: 'delete-page',
+      kind: 'delete-page',
+      group: 'Page操作',
+      label: '編集中Pageを削除',
+      description:
+        activePages.length <= 1
+          ? 'Projectには1件以上のPageが必要です。'
+          : `${activePageName}を確認後に削除します。`,
+      keywords: ['page', 'ページ', '削除', 'delete', activePageName],
+      disabled: activePage === undefined || activePages.length <= 1,
+      pageId: activePage?.id,
+    },
+    {
+      id: 'move-page-up',
+      kind: 'move-page-up',
+      group: 'Page操作',
+      label: '編集中Pageを上へ移動',
+      description:
+        activePageIndex <= 0
+          ? 'このPageは既に先頭です。'
+          : `${activePageName}を1つ上へ移動します。`,
+      keywords: ['page', 'ページ', '上へ', '並び替え', 'move up', activePageName],
+      disabled: activePageIndex <= 0,
+      pageId: activePage?.id,
+      toIndex: activePageIndex - 1,
+    },
+    {
+      id: 'move-page-down',
+      kind: 'move-page-down',
+      group: 'Page操作',
+      label: '編集中Pageを下へ移動',
+      description:
+        activePageIndex < 0 || activePageIndex >= activePages.length - 1
+          ? 'このPageは既に末尾です。'
+          : `${activePageName}を1つ下へ移動します。`,
+      keywords: ['page', 'ページ', '下へ', '並び替え', 'move down', activePageName],
+      disabled:
+        activePageIndex < 0 || activePageIndex >= activePages.length - 1,
+      pageId: activePage?.id,
+      toIndex: activePageIndex + 1,
+    },
+    {
+      id: 'undo-page-operation',
+      kind: 'undo-page-operation',
+      group: 'Page操作履歴',
+      label: 'Page操作を元に戻す',
+      description: canUndoPageOperation
+        ? '直前のPage追加・複製・名前変更・削除・並び替えを元に戻します。'
+        : '元に戻せるPage操作はありません。',
+      keywords: ['page', 'ページ', 'undo', '元に戻す', '履歴'],
+      disabled: !canUndoPageOperation,
+    },
+    {
+      id: 'redo-page-operation',
+      kind: 'redo-page-operation',
+      group: 'Page操作履歴',
+      label: 'Page操作をやり直す',
+      description: canRedoPageOperation
+        ? '取り消したPage操作をやり直します。'
+        : 'やり直せるPage操作はありません。',
+      keywords: ['page', 'ページ', 'redo', 'やり直す', '履歴'],
+      disabled: !canRedoPageOperation,
+    },
+    {
       id: 'show-shortcut-help',
       kind: 'show-shortcut-help',
       group: 'ヘルプ',
@@ -188,7 +328,7 @@ export function createProjectTabCommands({
     },
   ];
 
-  return [...projectCommands, ...operationCommands];
+  return [...projectCommands, ...pageCommands, ...operationCommands];
 }
 
 export function filterProjectTabCommands(

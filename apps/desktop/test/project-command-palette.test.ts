@@ -56,6 +56,8 @@ describe('project command palette', () => {
       tabs,
       canUndoProjectOperation: false,
       canRedoProjectOperation: true,
+      canUndoPageOperation: false,
+      canRedoPageOperation: false,
     });
 
     expect(
@@ -84,6 +86,8 @@ describe('project command palette', () => {
       tabs: createProjectTabsState('workspace-1', ['p1', 'p2', 'p3']),
       canUndoProjectOperation: true,
       canRedoProjectOperation: false,
+      canUndoPageOperation: false,
+      canRedoPageOperation: false,
     });
 
     expect(
@@ -92,11 +96,48 @@ describe('project command palette', () => {
       ),
     ).toEqual(['select-project:p2']);
     expect(
-      filterProjectTabCommands(commands, 'RENAME').map(
+      filterProjectTabCommands(commands, 'PROJECT RENAME').map(
         (command) => command.id,
       ),
     ).toEqual(['rename-active']);
     expect(filterProjectTabCommands(commands, '一致しない')).toEqual([]);
+  });
+
+  it('アクティブProjectのPage候補と主要操作を生成し、境界条件を無効化する', () => {
+    const pageProjects = [
+      {
+        id: 'p1',
+        name: '配信メイン',
+        activeEditPageId: 'page-1',
+        activeBroadcastPageId: 'page-2',
+        pages: [
+          { id: 'page-1', name: 'オープニング' },
+          { id: 'page-2', name: '待機画面' },
+        ],
+      },
+    ] as unknown as Project[];
+    const commands = createProjectTabCommands({
+      projects: pageProjects,
+      activeProjectId: 'p1',
+      tabs: createProjectTabsState('workspace-1', ['p1']),
+      canUndoProjectOperation: false,
+      canRedoProjectOperation: false,
+      canUndoPageOperation: true,
+      canRedoPageOperation: false,
+    });
+
+    expect(
+      commands.filter((command) => command.kind === 'select-page').map(
+        (command) => command.pageId,
+      ),
+    ).toEqual(['page-1', 'page-2']);
+    expect(commands.find((command) => command.id === 'move-page-up')?.disabled).toBe(true);
+    expect(commands.find((command) => command.id === 'move-page-down')?.disabled).toBe(false);
+    expect(commands.find((command) => command.id === 'delete-page')?.disabled).toBe(false);
+    expect(commands.find((command) => command.id === 'undo-page-operation')?.disabled).toBe(false);
+    expect(
+      filterProjectTabCommands(commands, 'page 待機').map((command) => command.id),
+    ).toContain('select-page:page-2');
   });
 
   it('無効候補を飛ばして循環選択し、全件無効では-1を返す', () => {

@@ -16,6 +16,7 @@ import {
 export type ProjectCommandType =
   | 'page.add'
   | 'page.duplicate'
+  | 'page.rename'
   | 'page.delete'
   | 'page.move'
   | 'page.select-edit'
@@ -38,6 +39,10 @@ export type DuplicatePageCommand = ProjectCommandBase<
   'page.duplicate',
   { sourcePageId: PageId; page: Page }
 >;
+export type RenamePageCommand = ProjectCommandBase<
+  'page.rename',
+  { pageId: PageId; name: string }
+>;
 export type DeletePageCommand = ProjectCommandBase<
   'page.delete',
   { pageId: PageId }
@@ -58,6 +63,7 @@ export type SelectBroadcastPageCommand = ProjectCommandBase<
 export type ProjectCommand =
   | AddPageCommand
   | DuplicatePageCommand
+  | RenamePageCommand
   | DeletePageCommand
   | MovePageCommand
   | SelectEditPageCommand
@@ -94,6 +100,23 @@ export function createDuplicatePageCommand(
   return {
     ...createCommandBase('page.duplicate', projectId, metadata),
     payload: { sourcePageId, page },
+  };
+}
+
+export function createRenamePageCommand(
+  projectId: ProjectId,
+  pageId: PageId,
+  name: string,
+  metadata: CommandMetadata,
+): RenamePageCommand {
+  const normalizedName = name.trim();
+  if (normalizedName.length < 1 || normalizedName.length > 120) {
+    throw new DomainError('INVALID_NAME', 'Entity name must be 1 to 120 characters');
+  }
+
+  return {
+    ...createCommandBase('page.rename', projectId, metadata),
+    payload: { pageId, name: normalizedName },
   };
 }
 
@@ -199,6 +222,13 @@ function applyCommandToProject(
         command.payload.page,
         command.createdAt,
       );
+    case 'page.rename':
+      return renamePage(
+        project,
+        command.payload.pageId,
+        command.payload.name,
+        command.createdAt,
+      );
     case 'page.delete':
       return deletePage(project, command.payload.pageId, command.createdAt);
     case 'page.move':
@@ -268,6 +298,25 @@ function duplicatePage(
     activeEditPageId: page.id,
     updatedAt,
   };
+}
+
+function renamePage(
+  project: Project,
+  pageId: PageId,
+  name: string,
+  updatedAt: string,
+): Project {
+  const pageIndex = project.pages.findIndex((page) => page.id === pageId);
+  if (pageIndex < 0) {
+    throw new DomainError('PAGE_NOT_FOUND', `Page not found: ${pageId}`);
+  }
+
+  const currentPage = project.pages[pageIndex]!;
+  if (currentPage.name === name) return project;
+
+  const pages = [...project.pages];
+  pages[pageIndex] = { ...currentPage, name, updatedAt };
+  return { ...project, pages, updatedAt };
 }
 
 function deletePage(

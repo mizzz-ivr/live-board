@@ -1,4 +1,4 @@
-import type { Project } from '@live-board/domain';
+import type { Page, Project } from '@live-board/domain';
 import {
   useEffect,
   useMemo,
@@ -41,6 +41,8 @@ export interface ProjectTabsProps {
   hasUnsavedChanges: boolean;
   canUndoProjectOperation: boolean;
   canRedoProjectOperation: boolean;
+  canUndoPageOperation: boolean;
+  canRedoPageOperation: boolean;
   onTabsChange: Dispatch<SetStateAction<ProjectTabsState>>;
   onSelect(projectId: string): void;
   onCreate(): void;
@@ -49,6 +51,14 @@ export interface ProjectTabsProps {
   onRename(projectId: string, name: string): void;
   onUndoProjectOperation(): void;
   onRedoProjectOperation(): void;
+  onSelectPage(pageId: string): void;
+  onCreatePage(): void;
+  onDuplicatePage(): void;
+  onDeletePage(pageId: string): void;
+  onRenamePage(pageId: string, name: string): void;
+  onMovePage(pageId: string, toIndex: number): void;
+  onUndoPageOperation(): void;
+  onRedoPageOperation(): void;
 }
 
 interface ProjectTabDropTarget {
@@ -63,6 +73,8 @@ export function ProjectTabs({
   hasUnsavedChanges,
   canUndoProjectOperation,
   canRedoProjectOperation,
+  canUndoPageOperation,
+  canRedoPageOperation,
   onTabsChange,
   onSelect,
   onCreate,
@@ -71,6 +83,14 @@ export function ProjectTabs({
   onRename,
   onUndoProjectOperation,
   onRedoProjectOperation,
+  onSelectPage,
+  onCreatePage,
+  onDuplicatePage,
+  onDeletePage,
+  onRenamePage,
+  onMovePage,
+  onUndoPageOperation,
+  onRedoPageOperation,
 }: ProjectTabsProps) {
   const projectIds = useMemo(() => projects.map((project) => project.id), [projects]);
   const projectsById = useMemo(
@@ -100,10 +120,14 @@ export function ProjectTabs({
         tabs,
         canUndoProjectOperation,
         canRedoProjectOperation,
+        canUndoPageOperation,
+        canRedoPageOperation,
       }),
     [
       activeProjectId,
+      canRedoPageOperation,
       canRedoProjectOperation,
+      canUndoPageOperation,
       canUndoProjectOperation,
       projects,
       tabs,
@@ -195,6 +219,21 @@ export function ProjectTabs({
     onRename(project.id, normalizedName);
   }
 
+  function renamePage(page: Page): void {
+    const requestedName = window.prompt(
+      'Page名を入力してください（1〜120文字）',
+      page.name,
+    );
+    if (requestedName === null) return;
+
+    const normalizedName = requestedName.trim();
+    if (normalizedName.length < 1 || normalizedName.length > 120) {
+      window.alert('Page名は1〜120文字で入力してください');
+      return;
+    }
+    onRenamePage(page.id, normalizedName);
+  }
+
   function executeCommandPaletteCommand(command: ProjectTabCommand): void {
     if (command.disabled) return;
 
@@ -241,6 +280,50 @@ export function ProjectTabs({
           return;
         case 'redo-project-operation':
           onRedoProjectOperation();
+          return;
+        case 'select-page':
+          if (command.pageId !== undefined) onSelectPage(command.pageId);
+          return;
+        case 'create-page':
+          onCreatePage();
+          return;
+        case 'duplicate-page':
+          onDuplicatePage();
+          return;
+        case 'rename-page': {
+          const activeProject = projectsById.get(activeProjectId);
+          const page = activeProject?.pages.find(
+            (candidate) => candidate.id === command.pageId,
+          );
+          if (page !== undefined) renamePage(page);
+          return;
+        }
+        case 'delete-page': {
+          const activeProject = projectsById.get(activeProjectId);
+          const page = activeProject?.pages.find(
+            (candidate) => candidate.id === command.pageId,
+          );
+          if (
+            page !== undefined
+            && window.confirm(
+              `「${page.name}」を削除します。\nこの操作はPage操作のUndoで元に戻せます。`,
+            )
+          ) {
+            onDeletePage(page.id);
+          }
+          return;
+        }
+        case 'move-page-up':
+        case 'move-page-down':
+          if (command.pageId !== undefined && command.toIndex !== undefined) {
+            onMovePage(command.pageId, command.toIndex);
+          }
+          return;
+        case 'undo-page-operation':
+          onUndoPageOperation();
+          return;
+        case 'redo-page-operation':
+          onRedoPageOperation();
           return;
         case 'show-shortcut-help':
           shortcutHelpReturnFocusRef.current = commandPaletteButtonRef.current;

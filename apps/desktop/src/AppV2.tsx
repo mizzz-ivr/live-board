@@ -34,6 +34,7 @@ import {
   createLayer,
   createMovePageCommand,
   createPage,
+  createRenamePageCommand,
   createPageRenderSnapshot,
   createProject,
   createProjectAssetLibrary,
@@ -612,6 +613,17 @@ export function AppV2() {
     setDomainError(null);
   }
 
+  function renamePage(pageId: string, name: string): void {
+    executeCommand(
+      createRenamePageCommand(
+        project.id,
+        pageId,
+        name,
+        createCommandMetadata('page-rename'),
+      ),
+    );
+  }
+
   function duplicateEditPage(): void {
     const timestamp = new Date().toISOString();
     const pageId = createEntityId('page');
@@ -850,6 +862,8 @@ export function AppV2() {
           hasUnsavedChanges={persistence.hasUnsavedChanges}
           canUndoProjectOperation={canUndoWorkspace(commandState)}
           canRedoProjectOperation={canRedoWorkspace(commandState)}
+          canUndoPageOperation={canUndoProject(commandState, project.id)}
+          canRedoPageOperation={canRedoProject(commandState, project.id)}
           onTabsChange={setProjectTabsState}
           onSelect={selectProject}
           onCreate={createProjectTab}
@@ -858,6 +872,49 @@ export function AppV2() {
           onRename={renameProject}
           onUndoProjectOperation={undoProjectOperation}
           onRedoProjectOperation={redoProjectOperation}
+          onSelectPage={(pageId) =>
+            executeCommand(
+              createSelectEditPageCommand(
+                project.id,
+                pageId,
+                createCommandMetadata('page-select-palette'),
+              ),
+            )
+          }
+          onCreatePage={addPage}
+          onDuplicatePage={duplicateEditPage}
+          onDeletePage={(pageId) =>
+            executeCommand(
+              createDeletePageCommand(
+                project.id,
+                pageId,
+                createCommandMetadata('page-delete-palette'),
+              ),
+            )
+          }
+          onRenamePage={renamePage}
+          onMovePage={(pageId, toIndex) =>
+            executeCommand(
+              createMovePageCommand(
+                project.id,
+                pageId,
+                toIndex,
+                createCommandMetadata('page-move-palette'),
+              ),
+            )
+          }
+          onUndoPageOperation={() => {
+            setCommandState((current) =>
+              undoProjectCommandWithCanvasHistory(current, project.id),
+            );
+            setDomainError(null);
+          }}
+          onRedoPageOperation={() => {
+            setCommandState((current) =>
+              redoProjectCommandWithCanvasHistory(current, project.id),
+            );
+            setDomainError(null);
+          }}
         />
 
         <div className="canvas-toolbar" aria-label="描画設定">
