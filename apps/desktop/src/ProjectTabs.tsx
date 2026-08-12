@@ -43,6 +43,7 @@ export interface ProjectTabsProps {
   canRedoProjectOperation: boolean;
   canUndoPageOperation: boolean;
   canRedoPageOperation: boolean;
+  isExternalModalOpen: boolean;
   onTabsChange: Dispatch<SetStateAction<ProjectTabsState>>;
   onSelect(projectId: string): void;
   onCreate(): void;
@@ -59,6 +60,7 @@ export interface ProjectTabsProps {
   onMovePage(pageId: string, toIndex: number): void;
   onUndoPageOperation(): void;
   onRedoPageOperation(): void;
+  onOpenPageTemplates(returnFocus?: HTMLElement | null): void;
 }
 
 interface ProjectTabDropTarget {
@@ -75,6 +77,7 @@ export function ProjectTabs({
   canRedoProjectOperation,
   canUndoPageOperation,
   canRedoPageOperation,
+  isExternalModalOpen,
   onTabsChange,
   onSelect,
   onCreate,
@@ -91,6 +94,7 @@ export function ProjectTabs({
   onMovePage,
   onUndoPageOperation,
   onRedoPageOperation,
+  onOpenPageTemplates,
 }: ProjectTabsProps) {
   const projectIds = useMemo(() => projects.map((project) => project.id), [projects]);
   const projectsById = useMemo(
@@ -287,6 +291,9 @@ export function ProjectTabs({
         case 'create-page':
           onCreatePage();
           return;
+        case 'show-page-templates':
+          onOpenPageTemplates(commandPaletteButtonRef.current);
+          return;
         case 'duplicate-page':
           onDuplicatePage();
           return;
@@ -350,6 +357,8 @@ export function ProjectTabs({
       event.preventDefault();
       event.stopPropagation();
 
+      if (isExternalModalOpen) return;
+
       if (action === 'show-command-palette') {
         if (commandPaletteOpen) closeCommandPalette();
         else openCommandPalette();
@@ -395,6 +404,7 @@ export function ProjectTabs({
   }, [
     activeProjectId,
     commandPaletteOpen,
+    isExternalModalOpen,
     onRename,
     onSelect,
     onTabsChange,
