@@ -17,6 +17,7 @@ export type ProjectTabCommandKind =
   | 'redo-project-operation'
   | 'select-page'
   | 'create-page'
+  | 'show-page-templates'
   | 'duplicate-page'
   | 'rename-page'
   | 'delete-page'
@@ -231,6 +232,24 @@ export function createProjectTabCommands({
       label: '新しいPageを作成',
       description: `${activeName}へ空のPageを追加して編集対象にします。`,
       keywords: ['page', 'ページ', '新規', '作成', '追加', activeName],
+      disabled: activeProject === undefined,
+    },
+    {
+      id: 'show-page-templates',
+      kind: 'show-page-templates',
+      group: 'Page操作',
+      label: 'テンプレートからPageを作成',
+      description: 'オープニング・待機・雑談・休憩・エンディングから選択します。',
+      keywords: [
+        'page',
+        'ページ',
+        'template',
+        'テンプレート',
+        'scene',
+        'シーン',
+        'preset',
+        'プリセット',
+      ],
       disabled: activeProject === undefined,
     },
     {

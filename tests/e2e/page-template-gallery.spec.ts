@@ -8,7 +8,7 @@ test('Pageパネルからテンプレートを作成し、Undo/Redoできる', a
   await expect(pageRows).toHaveCount(1);
 
   const templateButton = page.getByRole('button', {
-    name: 'テンプレートからページを追加',
+    name: 'Pageテンプレートを開く',
   });
   await templateButton.click();
 

@@ -71,13 +71,12 @@ export function PageTemplateDialog({
           </button>
         </header>
 
-        <div className="page-template-grid" role="list" aria-label="Pageテンプレート一覧">
+        <section className="page-template-grid" aria-label="Pageテンプレート一覧">
           {BUILT_IN_PAGE_TEMPLATES.map((template, index) => (
             <button
               ref={index === 0 ? firstTemplateRef : undefined}
               key={template.id}
               type="button"
-              role="listitem"
               className="page-template-card"
               aria-label={`${template.name}テンプレートでPageを作成`}
               onClick={() => onCreate(template.id)}
@@ -104,7 +103,7 @@ export function PageTemplateDialog({
               </span>
             </button>
           ))}
-        </div>
+        </section>
 
         <footer className="page-template-dialog-footer">
           <span>作成後も通常のPageとして自由に編集できます。</span>

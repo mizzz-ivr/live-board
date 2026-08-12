@@ -88,7 +88,12 @@ import { publishActiveProjectBroadcastSnapshot } from './project-broadcast-sync'
 import { BroadcastControlPanel } from './BroadcastControlPanel';
 import { CanvasSurfaceV2 } from './CanvasSurfaceV2';
 import { LayerPanel } from './LayerPanel';
+import { PageTemplateDialog } from './PageTemplateDialog';
 import { PageThumbnail } from './PageThumbnail';
+import {
+  createPageFromTemplate,
+  type BuiltInPageTemplateId,
+} from './page-templates';
 import { ProjectTabs } from './ProjectTabs';
 import {
   createProjectTabsState,
@@ -178,6 +183,8 @@ export function AppV2() {
   const [gridVisible, setGridVisible] = useState(false);
   const [guidesVisible, setGuidesVisible] = useState(true);
   const [renderMetrics, setRenderMetrics] = useState<RenderMetrics | null>(null);
+  const [pageTemplateDialogOpen, setPageTemplateDialogOpen] = useState(false);
+  const pageTemplateReturnFocusRef = useRef<HTMLElement | null>(null);
   const nextBroadcastRevisionRef = useRef(1);
   const registeredBroadcastAssetHashesRef = useRef(new Set<string>());
   const persistence = useWorkspacePersistence({
@@ -434,6 +441,58 @@ export function AppV2() {
         createCommandMetadata('page-add'),
       ),
     );
+  }
+
+  function openPageTemplateDialog(returnFocus?: HTMLElement | null): void {
+    const activeElement = document.activeElement;
+    pageTemplateReturnFocusRef.current =
+      returnFocus
+      ?? (activeElement instanceof HTMLElement
+        && activeElement !== document.body
+        && activeElement !== document.documentElement
+        ? activeElement
+        : null);
+    setPageTemplateDialogOpen(true);
+  }
+
+  function closePageTemplateDialog(): void {
+    setPageTemplateDialogOpen(false);
+    const returnFocus = pageTemplateReturnFocusRef.current;
+    window.requestAnimationFrame(() => {
+      if (returnFocus?.isConnected) returnFocus.focus();
+    });
+  }
+
+  function addPageFromTemplate(templateId: BuiltInPageTemplateId): void {
+    try {
+      const createdAt = new Date().toISOString();
+      const page = createPageFromTemplate({
+        templateId,
+        projectId: project.id,
+        pageId: createEntityId('page'),
+        createdAt,
+        createLayerId: () => createEntityId('layer-template'),
+      });
+      setCommandState((current) =>
+        dispatchProjectCommandWithCanvasHistory(
+          current,
+          createAddPageCommand(
+            project.id,
+            page,
+            createCommandMetadata('page-template-add'),
+          ),
+        ),
+      );
+      setSelection(null);
+      setSelectionMode(null);
+      setViewport(DEFAULT_CANVAS_VIEWPORT);
+      setDomainError(null);
+      closePageTemplateDialog();
+    } catch (error: unknown) {
+      setDomainError(
+        error instanceof Error ? error.message : 'Pageテンプレートの作成に失敗しました',
+      );
+    }
   }
 
   function selectProject(projectId: string): void {
@@ -864,6 +923,7 @@ export function AppV2() {
           canRedoProjectOperation={canRedoWorkspace(commandState)}
           canUndoPageOperation={canUndoProject(commandState, project.id)}
           canRedoPageOperation={canRedoProject(commandState, project.id)}
+          isExternalModalOpen={pageTemplateDialogOpen}
           onTabsChange={setProjectTabsState}
           onSelect={selectProject}
           onCreate={createProjectTab}
@@ -915,6 +975,7 @@ export function AppV2() {
             );
             setDomainError(null);
           }}
+          onOpenPageTemplates={openPageTemplateDialog}
         />
 
         <div className="canvas-toolbar" aria-label="描画設定">
@@ -1142,6 +1203,7 @@ export function AppV2() {
           editPageIndex={editPageIndex}
           addPage={addPage}
           duplicateEditPage={duplicateEditPage}
+          openPageTemplates={openPageTemplateDialog}
           executeCommand={executeCommand}
           setState={setCommandState}
           clearError={() => setDomainError(null)}
@@ -1179,6 +1241,12 @@ export function AppV2() {
           {domainError ?? 'Page・Layer・描画操作は別々の履歴へ記録されます'}
         </p>
       </aside>
+
+      <PageTemplateDialog
+        open={pageTemplateDialogOpen}
+        onRequestClose={closePageTemplateDialog}
+        onCreate={addPageFromTemplate}
+      />
     </div>
   );
 }
@@ -1190,6 +1258,7 @@ interface PagePanelProps {
   editPageIndex: number;
   addPage(): void;
   duplicateEditPage(): void;
+  openPageTemplates(returnFocus?: HTMLElement | null): void;
   executeCommand(command: ProjectCommand): void;
   setState: Dispatch<SetStateAction<CanvasWorkspaceCommandState>>;
   clearError(): void;
@@ -1203,6 +1272,7 @@ function PagePanel({
   editPageIndex,
   addPage,
   duplicateEditPage,
+  openPageTemplates,
   executeCommand,
   setState,
   clearError,
@@ -1212,6 +1282,13 @@ function PagePanel({
     <section>
       <div className="panel-heading">
         <h2>ページ</h2>
+        <button
+          type="button"
+          aria-label="Pageテンプレートを開く"
+          onClick={(event) => openPageTemplates(event.currentTarget)}
+        >
+          テンプレート
+        </button>
         <button type="button" aria-label="ページを追加" onClick={addPage}>＋</button>
       </div>
       <div className="history-actions" aria-label="ページ操作履歴">

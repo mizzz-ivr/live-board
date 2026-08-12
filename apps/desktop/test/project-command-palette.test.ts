@@ -138,6 +138,9 @@ describe('project command palette', () => {
     expect(
       filterProjectTabCommands(commands, 'page 待機').map((command) => command.id),
     ).toContain('select-page:page-2');
+    expect(
+      filterProjectTabCommands(commands, 'template').map((command) => command.id),
+    ).toEqual(['show-page-templates']);
   });
 
   it('無効候補を飛ばして循環選択し、全件無効では-1を返す', () => {
