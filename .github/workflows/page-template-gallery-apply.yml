@@ -24,10 +24,14 @@ jobs:
       - name: Apply page template integration
         run: python .github/scripts/apply-page-template-gallery-v2.py
 
+      - name: Adjust template button accessibility label
+        run: python .github/scripts/fix-page-template-button-label.py
+
       - name: Remove temporary implementation files
         run: |
           rm .github/scripts/apply-page-template-gallery.py
           rm .github/scripts/apply-page-template-gallery-v2.py
+          rm .github/scripts/fix-page-template-button-label.py
           rm .github/workflows/page-template-gallery-apply.yml
 
       - name: Setup pnpm
