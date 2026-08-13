@@ -22,12 +22,13 @@ jobs:
           fetch-depth: 0
 
       - name: Apply review fixes
-        run: python .github/scripts/fix-user-page-template-review-v2.py
+        run: python .github/scripts/fix-user-page-template-review-v3.py
 
       - name: Remove temporary implementation files
         run: |
           rm .github/scripts/fix-user-page-template-review.py
           rm .github/scripts/fix-user-page-template-review-v2.py
+          rm .github/scripts/fix-user-page-template-review-v3.py
           rm .github/workflows/user-page-template-review-fix.yml
 
       - name: Setup pnpm
