@@ -70,6 +70,7 @@
 - schema versionが将来版の場合は原本を変更せず機能を停止
 - schema version自体が欠損・不正な場合は空状態へ復旧
 - 一部エントリだけ不正な場合は、そのエントリだけ除外
+- Layerのtype / content / transform / Raster drawingを実行時検証し、描画不能なエントリを除外
 - 重複ID / 重複名は後続エントリを除外
 - 件数・容量上限を超えるエントリは除外
 - 復旧できた正常データは可能な範囲でストアへ書き戻す
@@ -125,6 +126,7 @@ Pageテンプレートギャラリーを次の3領域に分けます。
 - Folder / root / active / Raster参照の再マップ
 - 結合済みRasterの削除済み履歴IDを除外
 - LayerDocument整合性
+- Layer type / Rich Content / Transform / Raster drawingのRuntime Validation
 - Asset参照Pageの保存拒否
 - 保存 / 再読込 / 削除 / 削除復元
 - 未対応schemaの原本保持

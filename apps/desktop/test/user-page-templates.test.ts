@@ -230,6 +230,48 @@ describe('マイPageテンプレート', () => {
     );
   });
 
+  it('Layer content・transform・drawingが不正なエントリだけを除外する', () => {
+    const storage = new MemoryStorage();
+    const valid = createUserPageTemplate({
+      templateId: 'user-template:runtime-valid',
+      name: '正常Runtime',
+      page: structuredPage(),
+      createdAt: '2026-08-13T00:00:00.000Z',
+    });
+    const invalid = JSON.parse(JSON.stringify(valid)) as {
+      id: string;
+      name: string;
+      page: {
+        layerDocument?: {
+          layers: Array<Record<string, unknown>>;
+        };
+      };
+    };
+    invalid.id = 'user-template:runtime-invalid';
+    invalid.name = '不正Runtime';
+    const text = invalid.page.layerDocument?.layers.find(
+      (layer) => layer.type === 'text',
+    );
+    if (text === undefined || typeof text.content !== 'object' || text.content === null) {
+      throw new Error('text test fixture not found');
+    }
+    delete (text.content as Record<string, unknown>).fontFamily;
+    text.transform = { x: 0, y: 0, scaleX: 0, scaleY: 1, rotation: 0 };
+
+    storage.setItem(
+      USER_PAGE_TEMPLATE_STORAGE_KEY,
+      JSON.stringify({
+        schemaVersion: 1,
+        templates: [valid, invalid],
+        lastDeletedTemplate: null,
+      }),
+    );
+
+    const loaded = loadUserPageTemplates(storage);
+    expect(loaded.templates.map((item) => item.name)).toEqual(['正常Runtime']);
+    expect(loaded.warnings).toContain('読み込めないマイテンプレートを1件除外しました。');
+  });
+
   it('未対応schemaは原本を削除せず読み込みを停止する', () => {
     const storage = new MemoryStorage();
     const raw = JSON.stringify({ schemaVersion: 2, templates: [{ future: true }] });
