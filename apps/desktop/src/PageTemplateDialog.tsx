@@ -20,11 +20,13 @@ interface PageTemplateDialogProps {
   saveDisabledReason: string | null;
   userTemplates: readonly UserPageTemplate[];
   userTemplateMessage: string | null;
+  canRestoreDeleted: boolean;
   onRequestClose(): void;
   onCreate(templateId: BuiltInPageTemplateId): void;
   onCreateUserTemplate(templateId: string): void;
   onSaveCurrentPage(name: string): void;
   onDeleteUserTemplate(templateId: string): void;
+  onRestoreDeletedTemplate(): void;
 }
 
 export function PageTemplateDialog({
@@ -34,11 +36,13 @@ export function PageTemplateDialog({
   saveDisabledReason,
   userTemplates,
   userTemplateMessage,
+  canRestoreDeleted,
   onRequestClose,
   onCreate,
   onCreateUserTemplate,
   onSaveCurrentPage,
   onDeleteUserTemplate,
+  onRestoreDeletedTemplate,
 }: PageTemplateDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const firstTemplateRef = useRef<HTMLButtonElement>(null);
@@ -164,6 +168,13 @@ export function PageTemplateDialog({
               <h3 id="user-template-heading">マイテンプレート</h3>
               <p>自分で保存したPageを、別Projectや別Workspaceでも再利用できます。</p>
             </div>
+            <button
+              type="button"
+              disabled={!canRestoreDeleted}
+              onClick={onRestoreDeletedTemplate}
+            >
+              削除を元に戻す
+            </button>
           </div>
           {userTemplates.length === 0 ? (
             <p className="page-template-empty">まだマイテンプレートはありません。</p>
@@ -191,7 +202,7 @@ export function PageTemplateDialog({
                     onClick={() => {
                       if (
                         window.confirm(
-                          `マイテンプレート「${template.name}」を削除します。\nこの操作はPage操作のUndo対象ではありません。`,
+                          `マイテンプレート「${template.name}」を削除します。\n削除後は「削除を元に戻す」から直前の1件を復元できます。`,
                         )
                       ) {
                         onDeleteUserTemplate(template.id);

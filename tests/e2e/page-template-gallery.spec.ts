@@ -164,4 +164,18 @@ test('現在Pageをマイテンプレートへ保存し、再読込後に再利�
     }),
   ).toHaveCount(0);
   await expect(dialog.getByText('まだマイテンプレートはありません。')).toBeVisible();
+  const restoreButton = dialog.getByRole('button', { name: '削除を元に戻す' });
+  await expect(restoreButton).toBeEnabled();
+
+  await page.reload();
+  await expect(page.getByTestId('canvas-surface')).toBeVisible();
+  await page.getByRole('button', { name: 'Pageテンプレートを開く' }).click();
+  dialog = page.getByRole('dialog', { name: 'Pageテンプレート' });
+  await dialog.getByRole('button', { name: '削除を元に戻す' }).click();
+  await expect(
+    dialog.getByRole('button', {
+      name: '待機カスタムマイテンプレートでPageを作成',
+    }),
+  ).toBeVisible();
+  await expect(dialog.getByRole('button', { name: '削除を元に戻す' })).toBeDisabled();
 });

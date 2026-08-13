@@ -14,6 +14,7 @@ import {
   getUserPageTemplateSaveEligibility,
   instantiateUserPageTemplate,
   loadUserPageTemplates,
+  restoreLastDeletedUserPageTemplate,
   saveUserPageTemplate,
   type UserPageTemplateStorage,
 } from '../src/user-page-templates';
@@ -70,7 +71,7 @@ function structuredPage(): Page {
     type: 'raster',
     content: {
       assetId: null,
-      sourceLayerIds: [text.id],
+      sourceLayerIds: [text.id, 'deleted-history-layer'],
     },
   });
   const folder = {
@@ -199,7 +200,13 @@ describe('マイPageテンプレート', () => {
 
     const deleted = deleteUserPageTemplate(storage, template.id);
     expect(deleted.templates).toEqual([]);
+    expect(deleted.lastDeletedTemplate?.name).toBe('マイ待機');
     expect(loadUserPageTemplates(storage).templates).toEqual([]);
+    expect(loadUserPageTemplates(storage).lastDeletedTemplate?.name).toBe('マイ待機');
+
+    const restored = restoreLastDeletedUserPageTemplate(storage);
+    expect(restored.templates.map((item) => item.name)).toEqual(['マイ待機']);
+    expect(restored.lastDeletedTemplate).toBeNull();
   });
 
   it('NFKCと大文字小文字を無視して同名テンプレートの重複を拒否する', () => {
@@ -221,6 +228,17 @@ describe('マイPageテンプレート', () => {
     expect(() => saveUserPageTemplate(storage, second)).toThrowError(
       /既に存在します/,
     );
+  });
+
+  it('未対応schemaは原本を削除せず読み込みを停止する', () => {
+    const storage = new MemoryStorage();
+    const raw = JSON.stringify({ schemaVersion: 2, templates: [{ future: true }] });
+    storage.setItem(USER_PAGE_TEMPLATE_STORAGE_KEY, raw);
+
+    expect(() => loadUserPageTemplates(storage)).toThrowError(
+      /データは変更せず保持しています/,
+    );
+    expect(storage.getItem(USER_PAGE_TEMPLATE_STORAGE_KEY)).toBe(raw);
   });
 
   it('壊れたストア全体は空状態へ復旧する', () => {

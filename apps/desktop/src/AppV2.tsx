@@ -555,6 +555,10 @@ export function AppV2() {
     if (userPageTemplates.removeTemplate(templateId)) setDomainError(null);
   }
 
+  function restoreDeletedUserPageTemplate(): void {
+    if (userPageTemplates.restoreDeletedTemplate()) setDomainError(null);
+  }
+
   function selectProject(projectId: string): void {
     try {
       setCommandState((current) =>
@@ -1309,11 +1313,13 @@ export function AppV2() {
         saveDisabledReason={userTemplateSaveDisabledReason}
         userTemplates={userPageTemplates.templates}
         userTemplateMessage={userPageTemplates.message}
+        canRestoreDeleted={userPageTemplates.canRestoreDeleted}
         onRequestClose={closePageTemplateDialog}
         onCreate={addPageFromTemplate}
         onCreateUserTemplate={addPageFromUserTemplate}
         onSaveCurrentPage={saveEditPageAsUserTemplate}
         onDeleteUserTemplate={deleteUserPageTemplate}
+        onRestoreDeletedTemplate={restoreDeletedUserPageTemplate}
       />
     </div>
   );

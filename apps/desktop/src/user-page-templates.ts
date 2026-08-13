@@ -35,6 +35,7 @@ export interface UserPageTemplateEligibility {
 
 export interface UserPageTemplateLoadResult {
   readonly templates: UserPageTemplate[];
+  readonly lastDeletedTemplate: UserPageTemplate | null;
   readonly warnings: string[];
 }
 
@@ -54,6 +55,7 @@ export type UserPageTemplateErrorCode =
   | 'ASSET_REFERENCE_UNSUPPORTED'
   | 'INVALID_LAYER_REFERENCE'
   | 'DUPLICATE_LAYER_ID'
+  | 'UNSUPPORTED_SCHEMA_VERSION'
   | 'STORAGE_UNAVAILABLE';
 
 export class UserPageTemplateError extends Error {
@@ -69,6 +71,7 @@ export class UserPageTemplateError extends Error {
 interface UserPageTemplateStoreDocument {
   readonly schemaVersion: typeof USER_PAGE_TEMPLATE_SCHEMA_VERSION;
   readonly templates: readonly UserPageTemplate[];
+  readonly lastDeletedTemplate: UserPageTemplate | null;
 }
 
 export function getUserPageTemplateSaveEligibility(
@@ -169,7 +172,9 @@ export function loadUserPageTemplates(
     throw storageError(error);
   }
 
-  if (raw === null) return { templates: [], warnings: [] };
+  if (raw === null) {
+    return { templates: [], lastDeletedTemplate: null, warnings: [] };
+  }
 
   let parsed: unknown;
   try {
@@ -178,8 +183,20 @@ export function loadUserPageTemplates(
     recoverBrokenStore(storage);
     return {
       templates: [],
+      lastDeletedTemplate: null,
       warnings: ['マイテンプレート保存データが壊れていたため、安全な空状態へ復旧しました。'],
     };
+  }
+
+  if (
+    isRecord(parsed)
+    && typeof parsed.schemaVersion === 'number'
+    && parsed.schemaVersion !== USER_PAGE_TEMPLATE_SCHEMA_VERSION
+  ) {
+    throw new UserPageTemplateError(
+      'UNSUPPORTED_SCHEMA_VERSION',
+      `このアプリではschema version ${parsed.schemaVersion}のマイテンプレートを読み込めません。データは変更せず保持しています。`,
+    );
   }
 
   if (
@@ -190,7 +207,8 @@ export function loadUserPageTemplates(
     recoverBrokenStore(storage);
     return {
       templates: [],
-      warnings: ['未対応または不正なマイテンプレート保存データを検出し、空状態へ復旧しました。'],
+      lastDeletedTemplate: null,
+      warnings: ['不正なマイテンプレート保存データを検出し、空状態へ復旧しました。'],
     };
   }
 
@@ -214,7 +232,7 @@ export function loadUserPageTemplates(
       }
 
       const next = [...templates, template];
-      if (utf8ByteLength(serializeStore(next)) > USER_PAGE_TEMPLATE_TOTAL_BYTES) {
+      if (utf8ByteLength(serializeStore(next, null)) > USER_PAGE_TEMPLATE_TOTAL_BYTES) {
         warnings.push('保存容量上限を超えるマイテンプレートを除外しました。');
         continue;
       }
@@ -227,15 +245,44 @@ export function loadUserPageTemplates(
     }
   }
 
-  if (warnings.length > 0 || templates.length !== parsed.templates.length) {
+  let lastDeletedTemplate: UserPageTemplate | null = null;
+  if (parsed.lastDeletedTemplate !== undefined && parsed.lastDeletedTemplate !== null) {
     try {
-      persistTemplates(storage, templates);
+      const candidate = validateStoredTemplate(parsed.lastDeletedTemplate);
+      const normalizedName = comparableTemplateName(candidate.name);
+      const duplicatesActive =
+        ids.has(candidate.id) || names.has(normalizedName);
+      const fitsStore =
+        utf8ByteLength(serializeStore(templates, candidate))
+        <= USER_PAGE_TEMPLATE_TOTAL_BYTES;
+      if (duplicatesActive || !fitsStore) {
+        warnings.push('復元候補として保持できない削除済みテンプレートを除外しました。');
+      } else {
+        lastDeletedTemplate = candidate;
+      }
+    } catch {
+      warnings.push('読み込めない削除済みテンプレートを除外しました。');
+    }
+  }
+
+  if (
+    warnings.length > 0
+    || templates.length !== parsed.templates.length
+    || (parsed.lastDeletedTemplate ?? null) !== null && lastDeletedTemplate === null
+  ) {
+    try {
+      persistTemplates(storage, templates, lastDeletedTemplate);
     } catch {
       warnings.push('復旧後のマイテンプレート保存データを書き戻せませんでした。');
     }
   }
 
-  return { templates: templates.map(cloneTemplate), warnings };
+  return {
+    templates: templates.map(cloneTemplate),
+    lastDeletedTemplate:
+      lastDeletedTemplate === null ? null : cloneTemplate(lastDeletedTemplate),
+    warnings,
+  };
 }
 
 export function saveUserPageTemplate(
@@ -265,9 +312,13 @@ export function saveUserPageTemplate(
   }
 
   const next = [validated, ...current.templates];
-  persistTemplates(storage, next);
+  persistTemplates(storage, next, current.lastDeletedTemplate);
   return {
     templates: next.map(cloneTemplate),
+    lastDeletedTemplate:
+      current.lastDeletedTemplate === null
+        ? null
+        : cloneTemplate(current.lastDeletedTemplate),
     warnings: current.warnings,
   };
 }
@@ -277,10 +328,51 @@ export function deleteUserPageTemplate(
   templateId: string,
 ): UserPageTemplateLoadResult {
   const current = loadUserPageTemplates(storage);
+  const deleted = current.templates.find((template) => template.id === templateId) ?? null;
   const next = current.templates.filter((template) => template.id !== templateId);
-  if (next.length !== current.templates.length) persistTemplates(storage, next);
+  const lastDeletedTemplate = deleted ?? current.lastDeletedTemplate;
+  if (deleted !== null) persistTemplates(storage, next, deleted);
   return {
     templates: next.map(cloneTemplate),
+    lastDeletedTemplate:
+      lastDeletedTemplate === null ? null : cloneTemplate(lastDeletedTemplate),
+    warnings: current.warnings,
+  };
+}
+
+export function restoreLastDeletedUserPageTemplate(
+  storage: UserPageTemplateStorage,
+): UserPageTemplateLoadResult {
+  const current = loadUserPageTemplates(storage);
+  const deleted = current.lastDeletedTemplate;
+  if (deleted === null) return current;
+
+  if (current.templates.length >= USER_PAGE_TEMPLATE_LIMIT) {
+    throw new UserPageTemplateError(
+      'TEMPLATE_LIMIT_REACHED',
+      `マイテンプレートは最大${USER_PAGE_TEMPLATE_LIMIT}件まで保存できます。`,
+    );
+  }
+
+  const normalizedName = comparableTemplateName(deleted.name);
+  if (
+    current.templates.some(
+      (candidate) =>
+        candidate.id === deleted.id
+        || comparableTemplateName(candidate.name) === normalizedName,
+    )
+  ) {
+    throw new UserPageTemplateError(
+      'DUPLICATE_TEMPLATE_NAME',
+      `「${deleted.name}」と競合するマイテンプレートが存在するため復元できません。`,
+    );
+  }
+
+  const next = [deleted, ...current.templates];
+  persistTemplates(storage, next, null);
+  return {
+    templates: next.map(cloneTemplate),
+    lastDeletedTemplate: null,
     warnings: current.warnings,
   };
 }
@@ -371,9 +463,10 @@ function remapLayer(
       type: 'raster',
       content: {
         ...cloneJson(layer.content),
-        sourceLayerIds: layer.content.sourceLayerIds.map((id) =>
-          mapRequiredLayerId(idMap, id, 'sourceLayerIds'),
-        ),
+        sourceLayerIds: layer.content.sourceLayerIds.flatMap((id) => {
+          const mapped = idMap.get(id);
+          return mapped === undefined ? [] : [mapped];
+        }),
       },
     };
   }
@@ -441,6 +534,7 @@ function validateStoredTemplate(value: unknown): UserPageTemplate {
 function persistTemplates(
   storage: UserPageTemplateStorage,
   templates: readonly UserPageTemplate[],
+  lastDeletedTemplate: UserPageTemplate | null,
 ): void {
   if (templates.length > USER_PAGE_TEMPLATE_LIMIT) {
     throw new UserPageTemplateError(
@@ -449,7 +543,7 @@ function persistTemplates(
     );
   }
 
-  const serialized = serializeStore(templates);
+  const serialized = serializeStore(templates, lastDeletedTemplate);
   if (utf8ByteLength(serialized) > USER_PAGE_TEMPLATE_TOTAL_BYTES) {
     throw new UserPageTemplateError(
       'TEMPLATE_STORE_TOO_LARGE',
@@ -464,10 +558,14 @@ function persistTemplates(
   }
 }
 
-function serializeStore(templates: readonly UserPageTemplate[]): string {
+function serializeStore(
+  templates: readonly UserPageTemplate[],
+  lastDeletedTemplate: UserPageTemplate | null,
+): string {
   const document: UserPageTemplateStoreDocument = {
     schemaVersion: USER_PAGE_TEMPLATE_SCHEMA_VERSION,
     templates,
+    lastDeletedTemplate,
   };
   return JSON.stringify(document);
 }

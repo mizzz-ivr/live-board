@@ -4,6 +4,7 @@ import {
   createUserPageTemplate,
   deleteUserPageTemplate,
   loadUserPageTemplates,
+  restoreLastDeletedUserPageTemplate,
   saveUserPageTemplate,
   type UserPageTemplate,
   type UserPageTemplateStorage,
@@ -13,13 +14,16 @@ export interface UserPageTemplateController {
   readonly enabled: boolean;
   readonly templates: readonly UserPageTemplate[];
   readonly message: string | null;
+  readonly canRestoreDeleted: boolean;
   savePage(page: Page, name: string): boolean;
   removeTemplate(templateId: string): boolean;
+  restoreDeletedTemplate(): boolean;
 }
 
 interface UserPageTemplateState {
   readonly enabled: boolean;
   readonly templates: UserPageTemplate[];
+  readonly lastDeletedTemplate: UserPageTemplate | null;
   readonly message: string | null;
 }
 
@@ -40,6 +44,7 @@ export function useUserPageTemplates(): UserPageTemplateController {
       setState({
         enabled: true,
         templates: result.templates,
+        lastDeletedTemplate: result.lastDeletedTemplate,
         message: result.warnings.length > 0
           ? `「${template.name}」を保存しました。${result.warnings.join(' ')}`
           : `「${template.name}」をマイテンプレートへ保存しました。`,
@@ -61,6 +66,7 @@ export function useUserPageTemplates(): UserPageTemplateController {
       setState({
         enabled: true,
         templates: result.templates,
+        lastDeletedTemplate: result.lastDeletedTemplate,
         message: result.warnings.length > 0
           ? `マイテンプレートを削除しました。${result.warnings.join(' ')}`
           : 'マイテンプレートを削除しました。',
@@ -75,12 +81,35 @@ export function useUserPageTemplates(): UserPageTemplateController {
     }
   }, []);
 
+  const restoreDeletedTemplate = useCallback((): boolean => {
+    try {
+      const result = restoreLastDeletedUserPageTemplate(browserStorage());
+      setState({
+        enabled: true,
+        templates: result.templates,
+        lastDeletedTemplate: result.lastDeletedTemplate,
+        message: result.warnings.length > 0
+          ? `削除したマイテンプレートを復元しました。${result.warnings.join(' ')}`
+          : '削除したマイテンプレートを復元しました。',
+      });
+      return true;
+    } catch (error: unknown) {
+      setState((current) => ({
+        ...current,
+        message: errorMessage(error, 'マイテンプレートの復元に失敗しました。'),
+      }));
+      return false;
+    }
+  }, []);
+
   return {
     enabled: state.enabled,
     templates: state.templates,
     message: state.message,
+    canRestoreDeleted: state.lastDeletedTemplate !== null,
     savePage,
     removeTemplate,
+    restoreDeletedTemplate,
   };
 }
 
@@ -90,12 +119,14 @@ function loadInitialState(): UserPageTemplateState {
     return {
       enabled: true,
       templates: result.templates,
+      lastDeletedTemplate: result.lastDeletedTemplate,
       message: result.warnings.length === 0 ? null : result.warnings.join(' '),
     };
   } catch (error: unknown) {
     return {
       enabled: false,
       templates: [],
+      lastDeletedTemplate: null,
       message: errorMessage(error, 'マイテンプレート保存領域を利用できません。'),
     };
   }
