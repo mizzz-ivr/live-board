@@ -22,11 +22,12 @@ jobs:
           fetch-depth: 0
 
       - name: Apply runtime validation fix
-        run: python .github/scripts/fix-user-page-template-runtime-validation.py
+        run: python .github/scripts/fix-user-page-template-runtime-validation-v2.py
 
       - name: Remove temporary implementation files
         run: |
           rm .github/scripts/fix-user-page-template-runtime-validation.py
+          rm .github/scripts/fix-user-page-template-runtime-validation-v2.py
           rm .github/workflows/user-page-template-runtime-validation.yml
 
       - name: Setup pnpm
