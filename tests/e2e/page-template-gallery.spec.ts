@@ -77,7 +77,7 @@ test('コマンドパレットからギャラリーを開き、背面ショー�
   await page.keyboard.press('Control+K');
   const commandDialog = page.getByRole('dialog', { name: 'Project / Pageコマンド' });
   const search = commandDialog.getByRole('combobox', { name: 'コマンドを検索' });
-  await search.fill('template');
+  await search.fill('my template 保存');
   await expect(
     commandDialog.getByRole('option', { name: /テンプレートからPageを作成/ }),
   ).toBeVisible();
@@ -96,4 +96,86 @@ test('コマンドパレットからギャラリーを開き、背面ショー�
   await expect(
     page.getByRole('button', { name: 'コマンドパレットを表示' }),
   ).toBeFocused();
+});
+
+test('現在Pageをマイテンプレートへ保存し、再読込後に再利用・削除できる', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas-surface')).toBeVisible();
+
+  const templateButton = page.getByRole('button', {
+    name: 'Pageテンプレートを開く',
+  });
+  await templateButton.click();
+  let dialog = page.getByRole('dialog', { name: 'Pageテンプレート' });
+  await dialog.getByRole('button', {
+    name: '配信開始待機テンプレートでPageを作成',
+  }).click();
+
+  await templateButton.click();
+  dialog = page.getByRole('dialog', { name: 'Pageテンプレート' });
+  const nameInput = dialog.getByRole('textbox', { name: 'マイテンプレート名' });
+  await nameInput.fill('待機カスタム');
+  await dialog.getByRole('button', {
+    name: '現在のPageをマイテンプレートに保存',
+  }).click();
+  await expect(dialog.getByRole('status')).toContainText(
+    '「待機カスタム」をマイテンプレートへ保存しました。',
+  );
+  await expect(
+    dialog.getByRole('button', {
+      name: '待機カスタムマイテンプレートでPageを作成',
+    }),
+  ).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByTestId('canvas-surface')).toBeVisible();
+  const reloadedTemplateButton = page.getByRole('button', {
+    name: 'Pageテンプレートを開く',
+  });
+  await reloadedTemplateButton.click();
+  dialog = page.getByRole('dialog', { name: 'Pageテンプレート' });
+  const savedTemplate = dialog.getByRole('button', {
+    name: '待機カスタムマイテンプレートでPageを作成',
+  });
+  await expect(savedTemplate).toBeVisible();
+  await savedTemplate.click();
+
+  const pageRows = page.locator('.page-list .page-row');
+  await expect(pageRows).toHaveCount(2);
+  await expect(pageRows.nth(1)).toContainText('待機カスタム');
+  const layerTree = page.getByRole('tree', { name: 'レイヤーツリー' });
+  await expect(layerTree.getByRole('treeitem')).toHaveCount(6);
+  await expect(layerTree).toContainText('メインタイトル');
+
+  await reloadedTemplateButton.click();
+  dialog = page.getByRole('dialog', { name: 'Pageテンプレート' });
+  page.once('dialog', async (confirmDialog) => {
+    expect(confirmDialog.message()).toContain('待機カスタム');
+    await confirmDialog.accept();
+  });
+  await dialog.getByRole('button', {
+    name: '待機カスタムマイテンプレートを削除',
+  }).click();
+  await expect(
+    dialog.getByRole('button', {
+      name: '待機カスタムマイテンプレートでPageを作成',
+    }),
+  ).toHaveCount(0);
+  await expect(dialog.getByText('まだマイテンプレートはありません。')).toBeVisible();
+  const restoreButton = dialog.getByRole('button', { name: '削除を元に戻す' });
+  await expect(restoreButton).toBeEnabled();
+
+  await page.reload();
+  await expect(page.getByTestId('canvas-surface')).toBeVisible();
+  await page.getByRole('button', { name: 'Pageテンプレートを開く' }).click();
+  dialog = page.getByRole('dialog', { name: 'Pageテンプレート' });
+  await dialog.getByRole('button', { name: '削除を元に戻す' }).click();
+  await expect(
+    dialog.getByRole('button', {
+      name: '待機カスタムマイテンプレートでPageを作成',
+    }),
+  ).toBeVisible();
+  await expect(dialog.getByRole('button', { name: '削除を元に戻す' })).toBeDisabled();
 });

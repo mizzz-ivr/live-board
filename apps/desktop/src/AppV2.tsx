@@ -94,6 +94,10 @@ import {
   createPageFromTemplate,
   type BuiltInPageTemplateId,
 } from './page-templates';
+import {
+  getUserPageTemplateSaveEligibility,
+  instantiateUserPageTemplate,
+} from './user-page-templates';
 import { ProjectTabs } from './ProjectTabs';
 import {
   createProjectTabsState,
@@ -103,6 +107,7 @@ import { RichLayerInspector } from './RichLayerInspector';
 import { WorkspaceHome } from './WorkspaceHome';
 import { WorkspacePersistencePanel } from './WorkspacePersistencePanel';
 import { useBroadcastControls } from './useBroadcastControls';
+import { useUserPageTemplates } from './useUserPageTemplates';
 import { useWorkspacePersistence } from './useWorkspacePersistence';
 import { retainProjectAssetLibraries } from './workspace-session-assets';
 import './canvas-controls.css';
@@ -195,6 +200,7 @@ export function AppV2() {
     setAssetLibraries,
     setProjectTabsState,
   });
+  const userPageTemplates = useUserPageTemplates();
 
   const workspace = commandState.workspace;
   const project =
@@ -226,6 +232,10 @@ export function AppV2() {
   const editPage =
     project.pages.find((candidate) => candidate.id === project.activeEditPageId) ??
     project.pages[0]!;
+  const userTemplateEligibility = getUserPageTemplateSaveEligibility(editPage);
+  const userTemplateSaveDisabledReason = !userPageTemplates.enabled
+    ? userPageTemplates.message ?? 'マイテンプレート保存領域を利用できません。'
+    : userTemplateEligibility.reason;
   const broadcastPage =
     project.pages.find((candidate) => candidate.id === project.activeBroadcastPageId) ??
     project.pages[0]!;
@@ -493,6 +503,60 @@ export function AppV2() {
         error instanceof Error ? error.message : 'Pageテンプレートの作成に失敗しました',
       );
     }
+  }
+
+  function addPageFromUserTemplate(templateId: string): void {
+    const template = userPageTemplates.templates.find(
+      (candidate) => candidate.id === templateId,
+    );
+    if (template === undefined) {
+      setDomainError('マイテンプレートが見つかりません。');
+      return;
+    }
+
+    try {
+      const createdAt = new Date().toISOString();
+      const page = instantiateUserPageTemplate({
+        template,
+        projectId: project.id,
+        pageId: createEntityId('page'),
+        createdAt,
+        createLayerId: () => createEntityId('layer-user-template'),
+      });
+      setCommandState((current) =>
+        dispatchProjectCommandWithCanvasHistory(
+          current,
+          createAddPageCommand(
+            project.id,
+            page,
+            createCommandMetadata('page-user-template-add'),
+          ),
+        ),
+      );
+      setSelection(null);
+      setSelectionMode(null);
+      setViewport(DEFAULT_CANVAS_VIEWPORT);
+      setDomainError(null);
+      closePageTemplateDialog();
+    } catch (error: unknown) {
+      setDomainError(
+        error instanceof Error
+          ? error.message
+          : 'マイテンプレートからPageを作成できませんでした。',
+      );
+    }
+  }
+
+  function saveEditPageAsUserTemplate(name: string): void {
+    if (userPageTemplates.savePage(editPage, name)) setDomainError(null);
+  }
+
+  function deleteUserPageTemplate(templateId: string): void {
+    if (userPageTemplates.removeTemplate(templateId)) setDomainError(null);
+  }
+
+  function restoreDeletedUserPageTemplate(): void {
+    if (userPageTemplates.restoreDeletedTemplate()) setDomainError(null);
   }
 
   function selectProject(projectId: string): void {
@@ -1244,8 +1308,18 @@ export function AppV2() {
 
       <PageTemplateDialog
         open={pageTemplateDialogOpen}
+        currentPageName={editPage.name}
+        canSaveCurrentPage={userPageTemplates.enabled && userTemplateEligibility.allowed}
+        saveDisabledReason={userTemplateSaveDisabledReason}
+        userTemplates={userPageTemplates.templates}
+        userTemplateMessage={userPageTemplates.message}
+        canRestoreDeleted={userPageTemplates.canRestoreDeleted}
         onRequestClose={closePageTemplateDialog}
         onCreate={addPageFromTemplate}
+        onCreateUserTemplate={addPageFromUserTemplate}
+        onSaveCurrentPage={saveEditPageAsUserTemplate}
+        onDeleteUserTemplate={deleteUserPageTemplate}
+        onRestoreDeletedTemplate={restoreDeletedUserPageTemplate}
       />
     </div>
   );
