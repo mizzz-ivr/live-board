@@ -12,7 +12,7 @@
 
 `live-board:user-page-templates:v1`
 
-保存データにはschema versionを持たせ、Workspace保存・Autosave・Recoveryとは独立させます。
+保存データにはschema versionを持たせ、Workspace保存・Autosave・Recoveryとは独立させます。`localStorage`は外部入力境界として扱い、読み込み時に型アサーションだけへ依存せずLayer実データをRuntime Validationします。
 
 初期制限は以下です。
 
