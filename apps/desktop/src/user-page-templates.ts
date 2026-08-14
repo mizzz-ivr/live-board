@@ -216,9 +216,13 @@ export function loadUserPageTemplates(
   storage: UserPageTemplateStorage,
 ): UserPageTemplateLoadResult {
   let raw: string | null;
+  let loadedFromLegacy = false;
   try {
     raw = storage.getItem(USER_PAGE_TEMPLATE_STORAGE_KEY);
-    if (raw === null) raw = storage.getItem(USER_PAGE_TEMPLATE_LEGACY_STORAGE_KEY);
+    if (raw === null) {
+      raw = storage.getItem(USER_PAGE_TEMPLATE_LEGACY_STORAGE_KEY);
+      loadedFromLegacy = raw !== null;
+    }
   } catch (error: unknown) {
     throw storageError(error);
   }
@@ -231,7 +235,7 @@ export function loadUserPageTemplates(
   try {
     parsed = JSON.parse(raw);
   } catch {
-    recoverBrokenStore(storage);
+    recoverBrokenStore(storage, loadedFromLegacy);
     return {
       templates: [],
       lastDeletedTemplate: null,
@@ -261,7 +265,7 @@ export function loadUserPageTemplates(
     || parsed.schemaVersion !== USER_PAGE_TEMPLATE_SCHEMA_VERSION
     || !Array.isArray(parsed.templates)
   ) {
-    recoverBrokenStore(storage);
+    recoverBrokenStore(storage, loadedFromLegacy);
     return {
       templates: [],
       lastDeletedTemplate: null,
@@ -842,11 +846,25 @@ function serializeStore(
   return JSON.stringify(document);
 }
 
-function recoverBrokenStore(storage: UserPageTemplateStorage): void {
+function recoverBrokenStore(
+  storage: UserPageTemplateStorage,
+  preserveLegacy: boolean,
+): void {
+  try {
+    storage.setItem(
+      USER_PAGE_TEMPLATE_STORAGE_KEY,
+      serializeStore([], null),
+    );
+    return;
+  } catch {
+    // v1からの復旧ではダウングレード用原本を残す。
+  }
+
+  if (preserveLegacy) return;
   try {
     storage.removeItem(USER_PAGE_TEMPLATE_STORAGE_KEY);
   } catch {
-    // 読み込み側は空状態へ復旧できるため、削除失敗は追加例外にしない。
+    // 呼び出し側は空状態を返すため、追加例外にはしない。
   }
 }
 

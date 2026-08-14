@@ -163,6 +163,22 @@ describe('Asset付きマイPageテンプレート', () => {
     expect(loaded.warnings).toContain('読み込めないマイテンプレートを1件除外しました。');
   });
 
+  it('壊れた旧v1ストアは原本を保持し、v2の安全な空状態へ復旧する', () => {
+    const storage = new MemoryStorage();
+    const legacyRaw = '{broken-legacy-json';
+    storage.setItem(USER_PAGE_TEMPLATE_LEGACY_STORAGE_KEY, legacyRaw);
+
+    const recovered = loadUserPageTemplates(storage);
+    expect(recovered.templates).toEqual([]);
+    expect(recovered.warnings[0]).toContain('空状態へ復旧');
+    expect(storage.getItem(USER_PAGE_TEMPLATE_LEGACY_STORAGE_KEY)).toBe(legacyRaw);
+    expect(storage.getItem(USER_PAGE_TEMPLATE_STORAGE_KEY)).not.toBeNull();
+
+    const reloaded = loadUserPageTemplates(storage);
+    expect(reloaded.templates).toEqual([]);
+    expect(reloaded.warnings).toEqual([]);
+  });
+
   it('旧v1ストアをAssetなしv2テンプレートとしてコピー移行し、旧データを保持する', () => {
     const storage = new MemoryStorage();
     const current = createUserPageTemplate({

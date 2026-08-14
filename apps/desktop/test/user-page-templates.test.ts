@@ -290,7 +290,11 @@ describe('マイPageテンプレート', () => {
     const loaded = loadUserPageTemplates(storage);
     expect(loaded.templates).toEqual([]);
     expect(loaded.warnings[0]).toContain('空状態へ復旧');
-    expect(storage.getItem(USER_PAGE_TEMPLATE_STORAGE_KEY)).toBeNull();
+    expect(storage.getItem(USER_PAGE_TEMPLATE_STORAGE_KEY)).not.toBeNull();
+
+    const reloaded = loadUserPageTemplates(storage);
+    expect(reloaded.templates).toEqual([]);
+    expect(reloaded.warnings).toEqual([]);
   });
 
   it('壊れたエントリだけを除外して正常テンプレートを保持する', () => {
