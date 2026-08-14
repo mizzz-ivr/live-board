@@ -537,11 +537,7 @@ export function AppV2() {
         ...current,
         [project.id]: instantiated.assetLibrary,
       }));
-      setCommandState((current) =>
-        current === commandState
-          ? validatedState
-          : dispatchProjectCommandWithCanvasHistory(current, command),
-      );
+      setCommandState(validatedState);
       setSelection(null);
       setSelectionMode(null);
       setViewport(DEFAULT_CANVAS_VIEWPORT);
