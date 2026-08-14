@@ -190,6 +190,7 @@ export function AppV2() {
   const [guidesVisible, setGuidesVisible] = useState(true);
   const [renderMetrics, setRenderMetrics] = useState<RenderMetrics | null>(null);
   const [pageTemplateDialogOpen, setPageTemplateDialogOpen] = useState(false);
+  const [pageTemplateBusy, setPageTemplateBusy] = useState(false);
   const pageTemplateReturnFocusRef = useRef<HTMLElement | null>(null);
   const nextBroadcastRevisionRef = useRef(1);
   const registeredBroadcastAssetHashesRef = useRef(new Set<string>());
@@ -510,6 +511,7 @@ export function AppV2() {
   }
 
   async function addPageFromUserTemplate(templateId: string): Promise<void> {
+    if (pageTemplateBusy) return;
     const template = userPageTemplates.templates.find(
       (candidate) => candidate.id === templateId,
     );
@@ -518,6 +520,7 @@ export function AppV2() {
       return;
     }
 
+    setPageTemplateBusy(true);
     try {
       const createdAt = new Date().toISOString();
       const instantiated = await instantiateUserPageTemplateWithAssets({
@@ -551,19 +554,39 @@ export function AppV2() {
           ? error.message
           : 'マイテンプレートからPageを作成できませんでした。',
       );
+    } finally {
+      setPageTemplateBusy(false);
     }
   }
 
   async function saveEditPageAsUserTemplate(name: string): Promise<void> {
-    if (await userPageTemplates.savePage(editPage, name, assetLibrary)) setDomainError(null);
+    if (pageTemplateBusy) return;
+    setPageTemplateBusy(true);
+    try {
+      if (await userPageTemplates.savePage(editPage, name, assetLibrary)) setDomainError(null);
+    } finally {
+      setPageTemplateBusy(false);
+    }
   }
 
   async function deleteUserPageTemplate(templateId: string): Promise<void> {
-    if (await userPageTemplates.removeTemplate(templateId)) setDomainError(null);
+    if (pageTemplateBusy) return;
+    setPageTemplateBusy(true);
+    try {
+      if (await userPageTemplates.removeTemplate(templateId)) setDomainError(null);
+    } finally {
+      setPageTemplateBusy(false);
+    }
   }
 
   async function restoreDeletedUserPageTemplate(): Promise<void> {
-    if (await userPageTemplates.restoreDeletedTemplate()) setDomainError(null);
+    if (pageTemplateBusy) return;
+    setPageTemplateBusy(true);
+    try {
+      if (await userPageTemplates.restoreDeletedTemplate()) setDomainError(null);
+    } finally {
+      setPageTemplateBusy(false);
+    }
   }
 
   function selectProject(projectId: string): void {
@@ -1315,6 +1338,7 @@ export function AppV2() {
 
       <PageTemplateDialog
         open={pageTemplateDialogOpen}
+        busy={pageTemplateBusy}
         currentPageName={editPage.name}
         canSaveCurrentPage={userPageTemplates.enabled && userTemplateEligibility.allowed}
         saveDisabledReason={userTemplateSaveDisabledReason}
