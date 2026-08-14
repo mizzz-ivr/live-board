@@ -155,3 +155,19 @@ Pageテンプレートギャラリーを次の3領域に分けます。
 3. タグ・検索・お気に入り
 4. テンプレートExport / Import
 5. チーム共有・クラウド同期
+
+## Asset付きテンプレート（schema version 2）
+
+画像・Raster Layerが参照するProject Assetもマイテンプレートへ同梱できます。保存対象は現在Pageから実際に参照されているAssetだけです。
+
+- 保存キーは`live-board:user-page-templates:v2`
+- 旧`v1`ストアはAssetなしテンプレートとしてv2へコピー移行し、旧キーの原本は削除しない
+- 同梱Asset実バイト合計は1テンプレート1MiBまで
+- 1テンプレートJSONは2MiBまで
+- ストア全体JSONは4MiBまで
+- Asset IDは既存どおりSHA-256 content-addressed IDを利用
+- 再利用時はdata URLを再デコードし、既存`importProjectAsset`でMIME・SVG・寸法・容量・SHAを再検証
+- 同じSHAのAssetが対象Projectに存在する場合は重複登録しない
+- 参照切れAsset、改ざんAsset、容量超過はPage/Asset Libraryのどちらも変更する前に拒否
+
+動画・音声Asset、クラウド同期、Export / Importは引き続き対象外です。

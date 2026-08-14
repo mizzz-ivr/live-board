@@ -106,7 +106,7 @@ export function PageTemplateDialog({
           <div className="page-template-section-heading">
             <div>
               <h3>現在のPageを保存</h3>
-              <p>Asset非依存のPageを、Workspaceとは別のローカルテンプレートとして保存します。</p>
+              <p>Pageと参照画像Assetを、Workspaceとは別のローカルテンプレートとして保存します。</p>
             </div>
             <span>{userTemplates.length} / 50</span>
           </div>
@@ -192,7 +192,7 @@ export function PageTemplateDialog({
                     <span className="page-template-card-copy">
                       <strong>{template.name}</strong>
                       <span>保存済みPageから新しいPageを作成します。</span>
-                      <small>{new Date(template.createdAt).toLocaleString()}</small>
+                      <small>Asset {template.assets.length}件 · {new Date(template.createdAt).toLocaleString()}</small>
                     </span>
                   </button>
                   <button

@@ -96,7 +96,7 @@ import {
 } from './page-templates';
 import {
   getUserPageTemplateSaveEligibility,
-  instantiateUserPageTemplate,
+  instantiateUserPageTemplateWithAssets,
 } from './user-page-templates';
 import { ProjectTabs } from './ProjectTabs';
 import {
@@ -232,14 +232,17 @@ export function AppV2() {
   const editPage =
     project.pages.find((candidate) => candidate.id === project.activeEditPageId) ??
     project.pages[0]!;
-  const userTemplateEligibility = getUserPageTemplateSaveEligibility(editPage);
+  const assetLibrary = assetLibraries[project.id] ?? createProjectAssetLibrary();
+  const userTemplateEligibility = getUserPageTemplateSaveEligibility(
+    editPage,
+    assetLibrary,
+  );
   const userTemplateSaveDisabledReason = !userPageTemplates.enabled
     ? userPageTemplates.message ?? 'マイテンプレート保存領域を利用できません。'
     : userTemplateEligibility.reason;
   const broadcastPage =
     project.pages.find((candidate) => candidate.id === project.activeBroadcastPageId) ??
     project.pages[0]!;
-  const assetLibrary = assetLibraries[project.id] ?? createProjectAssetLibrary();
   const editPageIndex = project.pages.findIndex((page) => page.id === editPage.id);
   const projectHistory = getProjectHistory(commandState, project.id);
   const canvasHistory = getCanvasHistory(commandState, editPage.id);
@@ -516,22 +519,28 @@ export function AppV2() {
 
     try {
       const createdAt = new Date().toISOString();
-      const page = instantiateUserPageTemplate({
+      const instantiated = instantiateUserPageTemplateWithAssets({
         template,
         projectId: project.id,
         pageId: createEntityId('page'),
+        assetLibrary,
         createdAt,
         createLayerId: () => createEntityId('layer-user-template'),
       });
+      const command = createAddPageCommand(
+        project.id,
+        instantiated.page,
+        createCommandMetadata('page-user-template-add'),
+      );
+      const validatedState = dispatchProjectCommandWithCanvasHistory(commandState, command);
+      setAssetLibraries((current) => ({
+        ...current,
+        [project.id]: instantiated.assetLibrary,
+      }));
       setCommandState((current) =>
-        dispatchProjectCommandWithCanvasHistory(
-          current,
-          createAddPageCommand(
-            project.id,
-            page,
-            createCommandMetadata('page-user-template-add'),
-          ),
-        ),
+        current === commandState
+          ? validatedState
+          : dispatchProjectCommandWithCanvasHistory(current, command),
       );
       setSelection(null);
       setSelectionMode(null);
@@ -548,7 +557,7 @@ export function AppV2() {
   }
 
   function saveEditPageAsUserTemplate(name: string): void {
-    if (userPageTemplates.savePage(editPage, name)) setDomainError(null);
+    if (userPageTemplates.savePage(editPage, name, assetLibrary)) setDomainError(null);
   }
 
   function deleteUserPageTemplate(templateId: string): void {

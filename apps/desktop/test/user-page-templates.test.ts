@@ -167,11 +167,11 @@ describe('マイPageテンプレート', () => {
     assertLayerDocumentIntegrity(page.id, page.layerDocument!);
   });
 
-  it('Asset参照を含むPageは保存対象外にする', () => {
+  it('参照AssetがLibraryに存在しないPageは保存対象外にする', () => {
     const page = assetPage();
     const eligibility = getUserPageTemplateSaveEligibility(page);
     expect(eligibility.allowed).toBe(false);
-    expect(eligibility.reason).toContain('ロゴ画像');
+    expect(eligibility.reason).toContain('Assetが見つかりません');
 
     expect(() =>
       createUserPageTemplate({
@@ -274,7 +274,7 @@ describe('マイPageテンプレート', () => {
 
   it('未対応schemaは原本を削除せず読み込みを停止する', () => {
     const storage = new MemoryStorage();
-    const raw = JSON.stringify({ schemaVersion: 2, templates: [{ future: true }] });
+    const raw = JSON.stringify({ schemaVersion: 3, templates: [{ future: true }] });
     storage.setItem(USER_PAGE_TEMPLATE_STORAGE_KEY, raw);
 
     expect(() => loadUserPageTemplates(storage)).toThrowError(

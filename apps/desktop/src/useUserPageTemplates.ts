@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import type { Page } from '@live-board/domain';
+import type { Page, ProjectAssetLibrary } from '@live-board/domain';
 import {
   createUserPageTemplate,
   deleteUserPageTemplate,
@@ -15,7 +15,7 @@ export interface UserPageTemplateController {
   readonly templates: readonly UserPageTemplate[];
   readonly message: string | null;
   readonly canRestoreDeleted: boolean;
-  savePage(page: Page, name: string): boolean;
+  savePage(page: Page, name: string, assetLibrary: ProjectAssetLibrary): boolean;
   removeTemplate(templateId: string): boolean;
   restoreDeletedTemplate(): boolean;
 }
@@ -30,7 +30,11 @@ interface UserPageTemplateState {
 export function useUserPageTemplates(): UserPageTemplateController {
   const [state, setState] = useState<UserPageTemplateState>(loadInitialState);
 
-  const savePage = useCallback((page: Page, name: string): boolean => {
+  const savePage = useCallback((
+    page: Page,
+    name: string,
+    assetLibrary: ProjectAssetLibrary,
+  ): boolean => {
     try {
       const storage = browserStorage();
       const createdAt = new Date().toISOString();
@@ -38,6 +42,7 @@ export function useUserPageTemplates(): UserPageTemplateController {
         templateId: `user-template:${globalThis.crypto.randomUUID()}`,
         name,
         page,
+        assetLibrary,
         createdAt,
       });
       const result = saveUserPageTemplate(storage, template);
