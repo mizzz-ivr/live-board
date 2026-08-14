@@ -110,6 +110,20 @@ SVGはテンプレート専用の別サニタイザを持たず、Domainの既�
 
 Asset検証・Project Asset Library容量・Page Commandのいずれかが失敗した場合はstateを更新しません。Pageだけ追加、またはAssetだけ追加された半端な状態へ進めません。
 
+### 非同期Asset読込中のstate保護
+
+IndexedDBの読込中に開始時点の`commandState`が古くならないよう、Asset付きマイテンプレート作成中はPageテンプレートダイアログをbusy状態にします。
+
+- native modalを開いたまま`aria-busy=true`
+- Esc / cancelを無効化
+- 背景クリック・閉じるボタンを無効化
+- ビルトイン / マイテンプレート作成を無効化
+- 保存 / 削除 / 復元 / 名前入力を無効化
+- 既存ProjectTabsの`isExternalModalOpen`境界によりProject/Pageショートカットを無効化
+- 成功・失敗どちらでも`finally`でbusy解除
+
+これによりIndexedDB待機中のユーザー操作でPage編集・Project切替を確定できないため、事前検証したCommand stateを古い状態から全体上書きする経路を作りません。
+
 生成後のPage操作は既存のPage Undo / Redoへ合流します。
 
 ## Assetの削除とGC
@@ -151,6 +165,7 @@ Pageテンプレートギャラリーでは以下を行えます。
 - テンプレート削除
 - 直前に削除した1件を復元
 - 保存件数・エラー・復旧メッセージ表示
+- 非同期処理中のbusy状態を`role=status` / `aria-live`で通知
 
 既存のコマンドパレットから同じギャラリーを開けます。
 
