@@ -10,6 +10,15 @@ import {
   type ProjectAssetLibrary,
 } from '@live-board/domain';
 import {
+  collectUserPageTemplateAssetReferenceIds,
+  garbageCollectUserPageTemplateAssetPayloads,
+  persistUserPageTemplateAssetPayloads,
+} from '../src/user-page-template-assets';
+import type {
+  UserPageTemplateAssetPayload,
+  UserPageTemplateAssetPayloadStore,
+} from '../src/user-page-template-asset-payload-store';
+import {
   USER_PAGE_TEMPLATE_LEGACY_STORAGE_KEY,
   USER_PAGE_TEMPLATE_STORAGE_KEY,
   createUserPageTemplate,
@@ -33,6 +42,33 @@ class MemoryStorage implements UserPageTemplateStorage {
 
   removeItem(key: string): void {
     this.values.delete(key);
+  }
+}
+
+class MemoryPayloadStore implements UserPageTemplateAssetPayloadStore {
+  private readonly values = new Map<string, Uint8Array>();
+
+  async get(assetId: string): Promise<Uint8Array | null> {
+    const value = this.values.get(assetId);
+    return value === undefined ? null : new Uint8Array(value);
+  }
+
+  async putMany(payloads: readonly UserPageTemplateAssetPayload[]): Promise<void> {
+    for (const payload of payloads) {
+      this.values.set(payload.assetId, new Uint8Array(payload.bytes));
+    }
+  }
+
+  async listAssetIds(): Promise<string[]> {
+    return [...this.values.keys()];
+  }
+
+  async deleteMany(assetIds: readonly string[]): Promise<void> {
+    for (const assetId of assetIds) this.values.delete(assetId);
+  }
+
+  overwrite(assetId: string, bytes: Uint8Array): void {
+    this.values.set(assetId, new Uint8Array(bytes));
   }
 }
 
@@ -86,7 +122,9 @@ function emptyPage(): Page {
 }
 
 describe('Asset付きマイPageテンプレート', () => {
-  it('参照Assetを同梱し、別Projectへ再利用してもSHA重複排除する', () => {
+  it('Asset binaryをJSONへ埋め込まず、別Project再利用時にSHA重複排除する', async () => {
+    const storage = new MemoryStorage();
+    const payloadStore = new MemoryPayloadStore();
     const sourceLibrary = assetLibrary();
     const sourceAsset = sourceLibrary.assets[0]!;
     const page = imagePage(sourceAsset.id);
@@ -105,12 +143,20 @@ describe('Asset付きマイPageテンプレート', () => {
     });
     expect(template.assets).toHaveLength(1);
     expect(template.assets[0]?.sha256).toBe(sourceAsset.sha256);
+    expect('dataUrl' in template.assets[0]!).toBe(false);
 
-    const first = instantiateUserPageTemplateWithAssets({
+    await persistUserPageTemplateAssetPayloads(sourceLibrary.assets, payloadStore);
+    saveUserPageTemplate(storage, template);
+    const raw = storage.getItem(USER_PAGE_TEMPLATE_STORAGE_KEY) ?? '';
+    expect(raw).not.toContain('data:image/');
+    expect(raw).not.toContain(TINY_PNG_BASE64);
+
+    const first = await instantiateUserPageTemplateWithAssets({
       template,
       projectId: 'target-project',
       pageId: 'target-page-1',
       assetLibrary: createProjectAssetLibrary(),
+      assetPayloadStore: payloadStore,
       createdAt: '2026-08-14T00:20:00.000Z',
       createLayerId: () => 'target-image-1',
     });
@@ -118,11 +164,12 @@ describe('Asset付きマイPageテンプレート', () => {
     const firstImage = first.page.layerDocument?.layers.find((layer) => layer.type === 'image');
     expect(firstImage?.type === 'image' ? firstImage.content.assetId : null).toBe(sourceAsset.id);
 
-    const second = instantiateUserPageTemplateWithAssets({
+    const second = await instantiateUserPageTemplateWithAssets({
       template,
       projectId: 'target-project',
       pageId: 'target-page-2',
       assetLibrary: first.assetLibrary,
+      assetPayloadStore: payloadStore,
       createdAt: '2026-08-14T00:30:00.000Z',
       createLayerId: () => 'target-image-2',
     });
@@ -139,8 +186,9 @@ describe('Asset付きマイPageテンプレート', () => {
     expect(eligibility.reason).toContain('Assetが見つかりません');
   });
 
-  it('XML entityを含む安全なSVG Assetを保存・再読込できる', () => {
+  it('XML entityを含む安全なSVG Assetをbinary store経由で再検証できる', async () => {
     const storage = new MemoryStorage();
+    const payloadStore = new MemoryPayloadStore();
     const svg = new TextEncoder().encode(`
       <svg viewBox="0 0 100 100">
         <text x="10" y="20" font-family="A &amp; B">SAFE</text>
@@ -158,36 +206,71 @@ describe('Asset付きマイPageテンプレート', () => {
       assetLibrary: imported.library,
       createdAt: '2026-08-14T00:10:00.000Z',
     });
+    await persistUserPageTemplateAssetPayloads(imported.library.assets, payloadStore);
     saveUserPageTemplate(storage, template);
 
     const loaded = loadUserPageTemplates(storage);
     expect(loaded.warnings).toEqual([]);
     expect(loaded.templates).toHaveLength(1);
-    expect(loaded.templates[0]?.assets[0]?.dataUrl).toBe(template.assets[0]?.dataUrl);
+    const instantiated = await instantiateUserPageTemplateWithAssets({
+      template: loaded.templates[0]!,
+      projectId: 'target-project',
+      pageId: 'target-svg-page',
+      assetLibrary: createProjectAssetLibrary(),
+      assetPayloadStore: payloadStore,
+      createdAt: '2026-08-14T01:00:00.000Z',
+      createLayerId: () => 'target-svg-image',
+    });
+    expect(instantiated.assetLibrary.assets[0]?.id).toBe(imported.asset.id);
   });
 
-  it('改ざんされた同梱Assetだけを含むテンプレートを読み込み時に除外する', () => {
+  it('改ざんされたIndexedDB相当のAsset binaryを再利用時に拒否する', async () => {
     const storage = new MemoryStorage();
+    const payloadStore = new MemoryPayloadStore();
     const sourceLibrary = assetLibrary();
+    const sourceAsset = sourceLibrary.assets[0]!;
     const template = createUserPageTemplate({
       templateId: 'user-template:tampered-asset',
       name: '改ざん検証',
-      page: imagePage(sourceLibrary.assets[0]!.id),
+      page: imagePage(sourceAsset.id),
       assetLibrary: sourceLibrary,
       createdAt: '2026-08-14T00:10:00.000Z',
     });
+    await persistUserPageTemplateAssetPayloads(sourceLibrary.assets, payloadStore);
     saveUserPageTemplate(storage, template);
+    payloadStore.overwrite(sourceAsset.id, Uint8Array.from([1, 2, 3, 4]));
 
-    const document = JSON.parse(storage.getItem(USER_PAGE_TEMPLATE_STORAGE_KEY) ?? '{}') as {
-      templates: Array<{ assets: Array<{ dataUrl: string }> }>;
-    };
-    const dataUrl = document.templates[0]!.assets[0]!.dataUrl;
-    document.templates[0]!.assets[0]!.dataUrl = `${dataUrl.slice(0, -4)}AAAA`;
-    storage.setItem(USER_PAGE_TEMPLATE_STORAGE_KEY, JSON.stringify(document));
+    await expect(instantiateUserPageTemplateWithAssets({
+      template: loadUserPageTemplates(storage).templates[0]!,
+      projectId: 'target-project',
+      pageId: 'target-page',
+      assetLibrary: createProjectAssetLibrary(),
+      assetPayloadStore: payloadStore,
+      createdAt: '2026-08-14T01:00:00.000Z',
+      createLayerId: () => 'target-image',
+    })).rejects.toThrow(/サイズ|整合性|画像/);
+  });
 
-    const loaded = loadUserPageTemplates(storage);
-    expect(loaded.templates).toEqual([]);
-    expect(loaded.warnings).toContain('読み込めないマイテンプレートを1件除外しました。');
+  it('参照されなくなったbinaryだけをGCし、参照中Assetを保持する', async () => {
+    const payloadStore = new MemoryPayloadStore();
+    const sourceLibrary = assetLibrary();
+    const sourceAsset = sourceLibrary.assets[0]!;
+    await persistUserPageTemplateAssetPayloads(sourceLibrary.assets, payloadStore);
+    const orphanId = `asset:${'0'.repeat(64)}`;
+    await payloadStore.putMany([{ assetId: orphanId, bytes: Uint8Array.from([1]) }]);
+    const template = createUserPageTemplate({
+      templateId: 'user-template:gc',
+      name: 'GC',
+      page: imagePage(sourceAsset.id),
+      assetLibrary: sourceLibrary,
+      createdAt: '2026-08-14T00:10:00.000Z',
+    });
+
+    await garbageCollectUserPageTemplateAssetPayloads(
+      payloadStore,
+      collectUserPageTemplateAssetReferenceIds([template]),
+    );
+    expect(await payloadStore.listAssetIds()).toEqual([sourceAsset.id]);
   });
 
   it('壊れた旧v1ストアは原本を保持し、v2の安全な空状態へ復旧する', () => {
