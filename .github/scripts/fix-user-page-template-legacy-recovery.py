@@ -65,6 +65,25 @@ replace_once(
 """,
 )
 
+path = 'apps/desktop/test/user-page-templates.test.ts'
+replace_once(
+    path,
+    """    expect(loaded.templates).toEqual([]);
+    expect(loaded.warnings[0]).toContain('空状態へ復旧');
+    expect(storage.getItem(USER_PAGE_TEMPLATE_STORAGE_KEY)).toBeNull();
+  });
+""",
+    """    expect(loaded.templates).toEqual([]);
+    expect(loaded.warnings[0]).toContain('空状態へ復旧');
+    expect(storage.getItem(USER_PAGE_TEMPLATE_STORAGE_KEY)).not.toBeNull();
+
+    const reloaded = loadUserPageTemplates(storage);
+    expect(reloaded.templates).toEqual([]);
+    expect(reloaded.warnings).toEqual([]);
+  });
+""",
+)
+
 path = 'apps/desktop/test/user-page-template-assets.test.ts'
 text = Path(path).read_text(encoding='utf-8')
 marker = """  it('旧v1ストアをAssetなしv2テンプレートとしてコピー移行し、旧データを保持する', () => {
