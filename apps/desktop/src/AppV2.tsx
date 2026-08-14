@@ -96,8 +96,9 @@ import {
 } from './page-templates';
 import {
   getUserPageTemplateSaveEligibility,
-  instantiateUserPageTemplate,
+  instantiateUserPageTemplateWithAssets,
 } from './user-page-templates';
+import { getBrowserUserPageTemplateAssetPayloadStore } from './user-page-template-asset-payload-store';
 import { ProjectTabs } from './ProjectTabs';
 import {
   createProjectTabsState,
@@ -189,6 +190,7 @@ export function AppV2() {
   const [guidesVisible, setGuidesVisible] = useState(true);
   const [renderMetrics, setRenderMetrics] = useState<RenderMetrics | null>(null);
   const [pageTemplateDialogOpen, setPageTemplateDialogOpen] = useState(false);
+  const [pageTemplateBusy, setPageTemplateBusy] = useState(false);
   const pageTemplateReturnFocusRef = useRef<HTMLElement | null>(null);
   const nextBroadcastRevisionRef = useRef(1);
   const registeredBroadcastAssetHashesRef = useRef(new Set<string>());
@@ -232,14 +234,17 @@ export function AppV2() {
   const editPage =
     project.pages.find((candidate) => candidate.id === project.activeEditPageId) ??
     project.pages[0]!;
-  const userTemplateEligibility = getUserPageTemplateSaveEligibility(editPage);
+  const assetLibrary = assetLibraries[project.id] ?? createProjectAssetLibrary();
+  const userTemplateEligibility = getUserPageTemplateSaveEligibility(
+    editPage,
+    assetLibrary,
+  );
   const userTemplateSaveDisabledReason = !userPageTemplates.enabled
     ? userPageTemplates.message ?? 'マイテンプレート保存領域を利用できません。'
     : userTemplateEligibility.reason;
   const broadcastPage =
     project.pages.find((candidate) => candidate.id === project.activeBroadcastPageId) ??
     project.pages[0]!;
-  const assetLibrary = assetLibraries[project.id] ?? createProjectAssetLibrary();
   const editPageIndex = project.pages.findIndex((page) => page.id === editPage.id);
   const projectHistory = getProjectHistory(commandState, project.id);
   const canvasHistory = getCanvasHistory(commandState, editPage.id);
@@ -505,7 +510,8 @@ export function AppV2() {
     }
   }
 
-  function addPageFromUserTemplate(templateId: string): void {
+  async function addPageFromUserTemplate(templateId: string): Promise<void> {
+    if (pageTemplateBusy) return;
     const template = userPageTemplates.templates.find(
       (candidate) => candidate.id === templateId,
     );
@@ -514,25 +520,29 @@ export function AppV2() {
       return;
     }
 
+    setPageTemplateBusy(true);
     try {
       const createdAt = new Date().toISOString();
-      const page = instantiateUserPageTemplate({
+      const instantiated = await instantiateUserPageTemplateWithAssets({
         template,
         projectId: project.id,
         pageId: createEntityId('page'),
+        assetLibrary,
+        assetPayloadStore: getBrowserUserPageTemplateAssetPayloadStore(),
         createdAt,
         createLayerId: () => createEntityId('layer-user-template'),
       });
-      setCommandState((current) =>
-        dispatchProjectCommandWithCanvasHistory(
-          current,
-          createAddPageCommand(
-            project.id,
-            page,
-            createCommandMetadata('page-user-template-add'),
-          ),
-        ),
+      const command = createAddPageCommand(
+        project.id,
+        instantiated.page,
+        createCommandMetadata('page-user-template-add'),
       );
+      const validatedState = dispatchProjectCommandWithCanvasHistory(commandState, command);
+      setAssetLibraries((current) => ({
+        ...current,
+        [project.id]: instantiated.assetLibrary,
+      }));
+      setCommandState(validatedState);
       setSelection(null);
       setSelectionMode(null);
       setViewport(DEFAULT_CANVAS_VIEWPORT);
@@ -544,19 +554,39 @@ export function AppV2() {
           ? error.message
           : 'マイテンプレートからPageを作成できませんでした。',
       );
+    } finally {
+      setPageTemplateBusy(false);
     }
   }
 
-  function saveEditPageAsUserTemplate(name: string): void {
-    if (userPageTemplates.savePage(editPage, name)) setDomainError(null);
+  async function saveEditPageAsUserTemplate(name: string): Promise<void> {
+    if (pageTemplateBusy) return;
+    setPageTemplateBusy(true);
+    try {
+      if (await userPageTemplates.savePage(editPage, name, assetLibrary)) setDomainError(null);
+    } finally {
+      setPageTemplateBusy(false);
+    }
   }
 
-  function deleteUserPageTemplate(templateId: string): void {
-    if (userPageTemplates.removeTemplate(templateId)) setDomainError(null);
+  async function deleteUserPageTemplate(templateId: string): Promise<void> {
+    if (pageTemplateBusy) return;
+    setPageTemplateBusy(true);
+    try {
+      if (await userPageTemplates.removeTemplate(templateId)) setDomainError(null);
+    } finally {
+      setPageTemplateBusy(false);
+    }
   }
 
-  function restoreDeletedUserPageTemplate(): void {
-    if (userPageTemplates.restoreDeletedTemplate()) setDomainError(null);
+  async function restoreDeletedUserPageTemplate(): Promise<void> {
+    if (pageTemplateBusy) return;
+    setPageTemplateBusy(true);
+    try {
+      if (await userPageTemplates.restoreDeletedTemplate()) setDomainError(null);
+    } finally {
+      setPageTemplateBusy(false);
+    }
   }
 
   function selectProject(projectId: string): void {
@@ -1308,6 +1338,7 @@ export function AppV2() {
 
       <PageTemplateDialog
         open={pageTemplateDialogOpen}
+        busy={pageTemplateBusy}
         currentPageName={editPage.name}
         canSaveCurrentPage={userPageTemplates.enabled && userTemplateEligibility.allowed}
         saveDisabledReason={userTemplateSaveDisabledReason}

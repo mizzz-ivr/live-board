@@ -15,6 +15,7 @@ import './page-template-dialog.css';
 
 interface PageTemplateDialogProps {
   open: boolean;
+  busy: boolean;
   currentPageName: string;
   canSaveCurrentPage: boolean;
   saveDisabledReason: string | null;
@@ -31,6 +32,7 @@ interface PageTemplateDialogProps {
 
 export function PageTemplateDialog({
   open,
+  busy,
   currentPageName,
   canSaveCurrentPage,
   saveDisabledReason,
@@ -63,12 +65,12 @@ export function PageTemplateDialog({
   }, [currentPageName, open]);
 
   function handleBackdropClick(event: MouseEvent<HTMLDialogElement>): void {
-    if (event.target === event.currentTarget) onRequestClose();
+    if (!busy && event.target === event.currentTarget) onRequestClose();
   }
 
   function handleSave(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
-    if (!canSaveCurrentPage) return;
+    if (busy || !canSaveCurrentPage) return;
     onSaveCurrentPage(templateName);
   }
 
@@ -78,9 +80,10 @@ export function PageTemplateDialog({
       className="page-template-dialog"
       aria-labelledby="page-template-dialog-title"
       aria-describedby="page-template-dialog-description"
+      aria-busy={busy}
       onCancel={(event) => {
         event.preventDefault();
-        onRequestClose();
+        if (!busy) onRequestClose();
       }}
       onClick={handleBackdropClick}
     >
@@ -96,6 +99,7 @@ export function PageTemplateDialog({
           <button
             type="button"
             className="page-template-dialog-close"
+            disabled={busy}
             onClick={onRequestClose}
           >
             閉じる
@@ -106,7 +110,7 @@ export function PageTemplateDialog({
           <div className="page-template-section-heading">
             <div>
               <h3>現在のPageを保存</h3>
-              <p>Asset非依存のPageを、Workspaceとは別のローカルテンプレートとして保存します。</p>
+              <p>Pageと参照画像Assetを、Workspaceとは別のローカルテンプレートとして保存します。</p>
             </div>
             <span>{userTemplates.length} / 50</span>
           </div>
@@ -117,17 +121,22 @@ export function PageTemplateDialog({
                 type="text"
                 value={templateName}
                 maxLength={80}
+                disabled={busy}
                 onChange={(event) => setTemplateName(event.currentTarget.value)}
               />
             </label>
-            <button type="submit" disabled={!canSaveCurrentPage}>
+            <button type="submit" disabled={busy || !canSaveCurrentPage}>
               現在のPageをマイテンプレートに保存
             </button>
           </div>
           {saveDisabledReason !== null ? (
             <p className="page-template-warning">{saveDisabledReason}</p>
           ) : null}
-          {userTemplateMessage !== null ? (
+          {busy ? (
+            <p className="page-template-status" role="status" aria-live="polite">
+              テンプレートを処理しています。完了するまでこの画面を閉じられません。
+            </p>
+          ) : userTemplateMessage !== null ? (
             <p className="page-template-status" role="status" aria-live="polite">
               {userTemplateMessage}
             </p>
@@ -149,6 +158,7 @@ export function PageTemplateDialog({
                 type="button"
                 className="page-template-card"
                 aria-label={`${template.name}テンプレートでPageを作成`}
+                disabled={busy}
                 onClick={() => onCreate(template.id)}
               >
                 <TemplatePreview preview={template.preview} />
@@ -170,7 +180,7 @@ export function PageTemplateDialog({
             </div>
             <button
               type="button"
-              disabled={!canRestoreDeleted}
+              disabled={busy || !canRestoreDeleted}
               onClick={onRestoreDeletedTemplate}
             >
               削除を元に戻す
@@ -186,19 +196,21 @@ export function PageTemplateDialog({
                     type="button"
                     className="page-template-card"
                     aria-label={`${template.name}マイテンプレートでPageを作成`}
+                    disabled={busy}
                     onClick={() => onCreateUserTemplate(template.id)}
                   >
                     <TemplatePreview preview={template.preview} />
                     <span className="page-template-card-copy">
                       <strong>{template.name}</strong>
                       <span>保存済みPageから新しいPageを作成します。</span>
-                      <small>{new Date(template.createdAt).toLocaleString()}</small>
+                      <small>Asset {template.assets.length}件 · {new Date(template.createdAt).toLocaleString()}</small>
                     </span>
                   </button>
                   <button
                     type="button"
                     className="page-template-delete"
                     aria-label={`${template.name}マイテンプレートを削除`}
+                    disabled={busy}
                     onClick={() => {
                       if (
                         window.confirm(

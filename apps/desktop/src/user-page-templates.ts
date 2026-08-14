@@ -2,6 +2,7 @@ import {
   assertLayerDocumentIntegrity,
   assertLayerTransform,
   createPage,
+  createProjectAssetLibrary,
   getLayerDocument,
   getRichImageContent,
   getRichShapeContent,
@@ -12,14 +13,25 @@ import {
   type Layer,
   type LayerDocument,
   type Page,
+  type ProjectAssetLibrary,
   type RasterLayer,
   type ShapeLayer,
   type TextLayer,
 } from '@live-board/domain';
 import { parseRasterDrawing } from '@live-board/obs-protocol';
+import {
+  assertUserPageTemplateAssetReferences,
+  collectUserPageTemplateAssets,
+  mergeUserPageTemplateAssets,
+  toUserPageTemplateAssetMetadata,
+  validateUserPageTemplateAssets,
+  type UserPageTemplateAssetMetadata,
+} from './user-page-template-assets';
+import type { UserPageTemplateAssetPayloadStore } from './user-page-template-asset-payload-store';
 
-export const USER_PAGE_TEMPLATE_SCHEMA_VERSION = 1 as const;
-export const USER_PAGE_TEMPLATE_STORAGE_KEY = 'live-board:user-page-templates:v1';
+export const USER_PAGE_TEMPLATE_SCHEMA_VERSION = 2 as const;
+export const USER_PAGE_TEMPLATE_STORAGE_KEY = 'live-board:user-page-templates:v2';
+export const USER_PAGE_TEMPLATE_LEGACY_STORAGE_KEY = 'live-board:user-page-templates:v1';
 export const USER_PAGE_TEMPLATE_LIMIT = 50;
 export const USER_PAGE_TEMPLATE_MAX_BYTES = 256 * 1024;
 export const USER_PAGE_TEMPLATE_TOTAL_BYTES = 2 * 1024 * 1024;
@@ -37,6 +49,7 @@ export interface UserPageTemplate {
   readonly updatedAt: string;
   readonly preview: UserPageTemplatePreview;
   readonly page: Page;
+  readonly assets: readonly UserPageTemplateAssetMetadata[];
 }
 
 export interface UserPageTemplateEligibility {
@@ -67,6 +80,7 @@ export type UserPageTemplateErrorCode =
   | 'INVALID_LAYER_REFERENCE'
   | 'DUPLICATE_LAYER_ID'
   | 'UNSUPPORTED_SCHEMA_VERSION'
+  | 'ASSET_LIBRARY_REQUIRED'
   | 'STORAGE_UNAVAILABLE';
 
 export class UserPageTemplateError extends Error {
@@ -87,46 +101,41 @@ interface UserPageTemplateStoreDocument {
 
 export function getUserPageTemplateSaveEligibility(
   page: Page,
+  assetLibrary: ProjectAssetLibrary = createProjectAssetLibrary(),
 ): UserPageTemplateEligibility {
-  const document = getLayerDocument(page);
-  const unsupported = document.layers.filter(
-    (layer) =>
-      (layer.type === 'image' || layer.type === 'raster')
-      && layer.content.assetId !== null,
-  );
-
-  if (unsupported.length === 0) {
+  try {
+    collectUserPageTemplateAssets(page, assetLibrary);
     return { allowed: true, reason: null };
+  } catch (error: unknown) {
+    return {
+      allowed: false,
+      reason: error instanceof Error
+        ? error.message
+        : 'Pageが参照するAssetをマイテンプレートへ保存できません。',
+    };
   }
-
-  const names = unsupported
-    .slice(0, 3)
-    .map((layer) => `「${layer.name}」`)
-    .join('、');
-  const suffix = unsupported.length > 3 ? `ほか${unsupported.length - 3}件` : '';
-  return {
-    allowed: false,
-    reason:
-      `Asset参照を含むLayer（${names}${suffix}）は現在マイテンプレートへ保存できません。`
-      + '画像・描画Assetの複製対応後に保存可能になります。',
-  };
 }
 
 export function createUserPageTemplate(input: {
   readonly templateId: string;
   readonly name: string;
   readonly page: Page;
+  readonly assetLibrary?: ProjectAssetLibrary;
   readonly createdAt: string;
 }): UserPageTemplate {
   assertTemplateId(input.templateId);
   const name = normalizeTemplateName(input.name);
-  const eligibility = getUserPageTemplateSaveEligibility(input.page);
+  const assetLibrary = input.assetLibrary ?? createProjectAssetLibrary();
+  const eligibility = getUserPageTemplateSaveEligibility(input.page, assetLibrary);
   if (!eligibility.allowed) {
     throw new UserPageTemplateError(
       'ASSET_REFERENCE_UNSUPPORTED',
-      eligibility.reason ?? 'Asset参照を含むPageは保存できません。',
+      eligibility.reason ?? 'Pageが参照するAssetを保存できません。',
     );
   }
+  const assets = toUserPageTemplateAssetMetadata(
+    collectUserPageTemplateAssets(input.page, assetLibrary),
+  );
 
   const snapshotProjectId = `template-project:${input.templateId}`;
   const snapshotPageId = `template-page:${input.templateId}`;
@@ -150,9 +159,15 @@ export function createUserPageTemplate(input: {
     updatedAt: input.createdAt,
     preview: derivePreview(page),
     page,
+    assets,
   };
   assertTemplateByteSize(template);
   return cloneTemplate(template);
+}
+
+export interface InstantiatedUserPageTemplate {
+  readonly page: Page;
+  readonly assetLibrary: ProjectAssetLibrary;
 }
 
 export function instantiateUserPageTemplate(input: {
@@ -163,6 +178,12 @@ export function instantiateUserPageTemplate(input: {
   readonly createLayerId: () => string;
 }): Page {
   const template = validateStoredTemplate(input.template);
+  if (template.assets.length > 0) {
+    throw new UserPageTemplateError(
+      'ASSET_LIBRARY_REQUIRED',
+      'Asset付きマイテンプレートはAsset Libraryを指定して作成してください。',
+    );
+  }
   return clonePageWithRemappedLayerIds({
     sourcePage: template.page,
     projectId: input.projectId,
@@ -173,12 +194,44 @@ export function instantiateUserPageTemplate(input: {
   });
 }
 
+export async function instantiateUserPageTemplateWithAssets(input: {
+  readonly template: UserPageTemplate;
+  readonly projectId: string;
+  readonly pageId: string;
+  readonly assetLibrary: ProjectAssetLibrary;
+  readonly assetPayloadStore: UserPageTemplateAssetPayloadStore;
+  readonly createdAt: string;
+  readonly createLayerId: () => string;
+}): Promise<InstantiatedUserPageTemplate> {
+  const template = validateStoredTemplate(input.template);
+  const assetLibrary = await mergeUserPageTemplateAssets(
+    input.assetLibrary,
+    template.assets,
+    input.assetPayloadStore,
+  );
+  const page = clonePageWithRemappedLayerIds({
+    sourcePage: template.page,
+    projectId: input.projectId,
+    pageId: input.pageId,
+    name: template.name,
+    createdAt: input.createdAt,
+    createLayerId: input.createLayerId,
+  });
+  assertUserPageTemplateAssetReferences(page, template.assets);
+  return { page, assetLibrary };
+}
+
 export function loadUserPageTemplates(
   storage: UserPageTemplateStorage,
 ): UserPageTemplateLoadResult {
   let raw: string | null;
+  let loadedFromLegacy = false;
   try {
     raw = storage.getItem(USER_PAGE_TEMPLATE_STORAGE_KEY);
+    if (raw === null) {
+      raw = storage.getItem(USER_PAGE_TEMPLATE_LEGACY_STORAGE_KEY);
+      loadedFromLegacy = raw !== null;
+    }
   } catch (error: unknown) {
     throw storageError(error);
   }
@@ -191,12 +244,18 @@ export function loadUserPageTemplates(
   try {
     parsed = JSON.parse(raw);
   } catch {
-    recoverBrokenStore(storage);
+    recoverBrokenStore(storage, loadedFromLegacy);
     return {
       templates: [],
       lastDeletedTemplate: null,
       warnings: ['マイテンプレート保存データが壊れていたため、安全な空状態へ復旧しました。'],
     };
+  }
+
+  let migratedLegacy = false;
+  if (isRecord(parsed) && parsed.schemaVersion === 1) {
+    parsed = migrateLegacyStoreDocument(parsed);
+    migratedLegacy = true;
   }
 
   if (
@@ -215,7 +274,7 @@ export function loadUserPageTemplates(
     || parsed.schemaVersion !== USER_PAGE_TEMPLATE_SCHEMA_VERSION
     || !Array.isArray(parsed.templates)
   ) {
-    recoverBrokenStore(storage);
+    recoverBrokenStore(storage, loadedFromLegacy);
     return {
       templates: [],
       lastDeletedTemplate: null,
@@ -277,7 +336,8 @@ export function loadUserPageTemplates(
   }
 
   if (
-    warnings.length > 0
+    migratedLegacy
+    || warnings.length > 0
     || templates.length !== parsed.templates.length
     || (parsed.lastDeletedTemplate ?? null) !== null && lastDeletedTemplate === null
   ) {
@@ -522,13 +582,8 @@ function validateStoredTemplate(value: unknown): UserPageTemplate {
   assertLayerDocumentIntegrity(metadata.id, document);
 
   const page: Page = { ...metadata, layerDocument: document };
-  const eligibility = getUserPageTemplateSaveEligibility(page);
-  if (!eligibility.allowed) {
-    throw new UserPageTemplateError(
-      'ASSET_REFERENCE_UNSUPPORTED',
-      eligibility.reason ?? 'Asset参照を含むPageは保存できません。',
-    );
-  }
+  const assets = validateUserPageTemplateAssets(value.assets);
+  assertUserPageTemplateAssetReferences(page, assets);
 
   const template: UserPageTemplate = {
     id,
@@ -537,6 +592,7 @@ function validateStoredTemplate(value: unknown): UserPageTemplate {
     updatedAt,
     preview: derivePreview(page),
     page,
+    assets,
   };
   assertTemplateByteSize(template);
   return cloneTemplate(template);
@@ -743,6 +799,23 @@ function requiredFiniteNumber(value: unknown): number {
   return value;
 }
 
+function migrateLegacyStoreDocument(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!Array.isArray(value.templates)) return value;
+  const migrateTemplate = (candidate: unknown): unknown =>
+    isRecord(candidate) ? { ...candidate, assets: [] } : candidate;
+  return {
+    ...value,
+    schemaVersion: USER_PAGE_TEMPLATE_SCHEMA_VERSION,
+    templates: value.templates.map(migrateTemplate),
+    lastDeletedTemplate:
+      value.lastDeletedTemplate === undefined || value.lastDeletedTemplate === null
+        ? null
+        : migrateTemplate(value.lastDeletedTemplate),
+  };
+}
+
 function persistTemplates(
   storage: UserPageTemplateStorage,
   templates: readonly UserPageTemplate[],
@@ -759,7 +832,7 @@ function persistTemplates(
   if (utf8ByteLength(serialized) > USER_PAGE_TEMPLATE_TOTAL_BYTES) {
     throw new UserPageTemplateError(
       'TEMPLATE_STORE_TOO_LARGE',
-      'マイテンプレートの合計保存容量が2MiBを超えます。',
+      'マイテンプレートの合計metadata保存容量が2MiBを超えます。',
     );
   }
 
@@ -782,11 +855,25 @@ function serializeStore(
   return JSON.stringify(document);
 }
 
-function recoverBrokenStore(storage: UserPageTemplateStorage): void {
+function recoverBrokenStore(
+  storage: UserPageTemplateStorage,
+  preserveLegacy: boolean,
+): void {
+  try {
+    storage.setItem(
+      USER_PAGE_TEMPLATE_STORAGE_KEY,
+      serializeStore([], null),
+    );
+    return;
+  } catch {
+    // v1からの復旧ではダウングレード用原本を残す。
+  }
+
+  if (preserveLegacy) return;
   try {
     storage.removeItem(USER_PAGE_TEMPLATE_STORAGE_KEY);
   } catch {
-    // 読み込み側は空状態へ復旧できるため、削除失敗は追加例外にしない。
+    // 呼び出し側は空状態を返すため、追加例外にはしない。
   }
 }
 
@@ -879,7 +966,7 @@ function assertTemplateByteSize(template: UserPageTemplate): void {
   if (utf8ByteLength(JSON.stringify(template)) > USER_PAGE_TEMPLATE_MAX_BYTES) {
     throw new UserPageTemplateError(
       'TEMPLATE_TOO_LARGE',
-      'このPageはマイテンプレート1件あたりの保存上限256KiBを超えています。',
+      'このPageはマイテンプレート1件あたりのmetadata保存上限256KiBを超えています。',
     );
   }
 }

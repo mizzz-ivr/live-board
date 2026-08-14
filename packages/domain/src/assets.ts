@@ -411,7 +411,7 @@ function parseSvgLength(value: string | undefined): number | null { if (value ==
 function normalizeFileName(value: string): string { const trimmed = value.trim().replace(/[\\/\0]/g, '_'); return (trimmed || 'clipboard-image').slice(0, 240); }
 function canonicalSvgTagName(value: string): string { const map: Record<string,string> = { lineargradient: 'linearGradient', radialgradient: 'radialGradient', clippath: 'clipPath' }; return map[value] ?? value; }
 function canonicalSvgAttributeName(value: string): string { const map: Record<string,string> = { viewbox: 'viewBox', preserveaspectratio: 'preserveAspectRatio', gradientunits: 'gradientUnits', gradienttransform: 'gradientTransform', patternunits: 'patternUnits', patterntransform: 'patternTransform' }; return map[value] ?? value; }
-function escapeAttribute(value: string): string { return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function escapeAttribute(value: string): string { return value.replace(/&(?!amp;|quot;|lt;|gt;)/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function escapeUnsafeText(value: string): string { return value.replace(/<(?!!--)/g, '&lt;'); }
 function assetError(code: AssetErrorCode, message: string): AssetValidationError { return new AssetValidationError(code, message); }
 
