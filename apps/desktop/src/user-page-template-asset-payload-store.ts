@@ -117,12 +117,16 @@ class IndexedDbUserPageTemplateAssetPayloadStore implements UserPageTemplateAsse
     return await new Promise((resolve, reject) => {
       const transaction = database.transaction(OBJECT_STORE_NAME, 'readonly');
       const request = transaction.objectStore(OBJECT_STORE_NAME).getAllKeys();
-      request.onsuccess = () => resolve(
-        request.result.map((key) => {
-          if (typeof key !== 'string') throw new Error('不正なAssetバイナリキーを検出しました。');
-          return key;
-        }),
-      );
+      request.onsuccess = () => {
+        try {
+          resolve(request.result.map((key) => {
+            if (typeof key !== 'string') throw new Error('不正なAssetバイナリキーを検出しました。');
+            return key;
+          }));
+        } catch (error: unknown) {
+          reject(error);
+        }
+      };
       request.onerror = () => reject(request.error ?? new Error('Assetバイナリ一覧の取得に失敗しました。'));
     });
   }
