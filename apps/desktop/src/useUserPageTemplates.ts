@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { Page, ProjectAssetLibrary } from '@live-board/domain';
 import {
   createUserPageTemplate,
@@ -37,15 +37,6 @@ interface UserPageTemplateState {
 export function useUserPageTemplates(): UserPageTemplateController {
   const [state, setState] = useState<UserPageTemplateState>(loadInitialState);
 
-  useEffect(() => {
-    const initial = loadInitialState();
-    if (!initial.enabled) return;
-    void garbageCollectResult({
-      templates: initial.templates,
-      lastDeletedTemplate: initial.lastDeletedTemplate,
-    }).catch(() => undefined);
-  }, []);
-
   const savePage = useCallback(async (
     page: Page,
     name: string,
@@ -53,6 +44,8 @@ export function useUserPageTemplates(): UserPageTemplateController {
   ): Promise<boolean> => {
     try {
       const storage = browserStorage();
+      await garbageCollectCurrentStoreBestEffort();
+
       const createdAt = new Date().toISOString();
       const template = createUserPageTemplate({
         templateId: `user-template:${globalThis.crypto.randomUUID()}`,
