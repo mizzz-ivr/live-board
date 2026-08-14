@@ -1,0 +1,70 @@
+name: User Page Template Assets Implementation
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    if: github.head_ref == 'feat/user-page-template-assets'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/user-page-template-assets
+          fetch-depth: 0
+
+      - name: Apply implementation patch
+        run: python .github/scripts/apply-user-page-template-assets.py
+
+      - name: Remove temporary implementation files
+        run: |
+          rm .github/scripts/apply-user-page-template-assets.py
+          rm .github/workflows/user-page-template-assets-implementation.yml
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: E2E smoke tests
+        run: pnpm test:e2e
+
+      - name: Commit verified implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Asset付きマイPageテンプレートの保存・再利用を追加"
+          git push origin HEAD:feat/user-page-template-assets
