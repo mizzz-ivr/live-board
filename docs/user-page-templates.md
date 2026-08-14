@@ -61,11 +61,11 @@ Asset binaryをJSON/Base64から分離することで、同期JSONシリアラ�
 8. Page ID / Project ID / Layer IDをテンプレート用IDへ変換
 9. Layer内参照IDを再マップ
 10. localStorageへPage / Layer + Asset metadataだけを保存
-11. 保存後の参照集合を基準に孤立binaryをGC
+11. 保存後は**最新の永続metadataを再読込**して孤立binaryをGC
 
 binaryを先に保存してmetadataを後から確定します。metadata保存に失敗した場合は現在のmetadata参照集合を使って孤立binaryを回収します。この順序により、通常フローでは「metadataだけ存在してbinaryがない」状態を作りません。
 
-起動時に独立した非同期GCは実行しません。保存処理とGCが競合して新規binaryを誤削除しないよう、GCはsave / delete / restoreの操作境界で直列に実行します。
+起動時に独立した非同期GCは実行しません。さらにsave / delete / restoreは共通のmutation queueで**操作全体を直列化**します。短時間に保存操作を連続実行しても、先行処理のGCが後続処理で書き込んだAsset binaryを削除しないよう、binary保存・metadata確定・GCを1つのクリティカルセクションとして扱います。
 
 ## AssetのRuntime Validation
 
@@ -121,7 +121,7 @@ GC対象は次のすべてから参照されていないAssetだけです。
 - 現在保存されているマイテンプレート
 - 直前に削除した復元候補
 
-次の削除で復元候補が置き換わり、旧候補のAssetが他テンプレートからも参照されていなければ、そのbinaryをIndexedDBから削除します。
+次の削除で復元候補が置き換わり、旧候補のAssetが他テンプレートからも参照されていなければ、そのbinaryをIndexedDBから削除します。GC直前には最新のlocalStorage metadataを再読込し、古い操作結果だけを参照集合として使いません。
 
 ## Layer参照の扱い
 
