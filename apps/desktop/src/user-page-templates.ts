@@ -13,7 +13,6 @@ import {
   type Layer,
   type LayerDocument,
   type Page,
-  type ProjectAsset,
   type ProjectAssetLibrary,
   type RasterLayer,
   type ShapeLayer,
@@ -24,15 +23,18 @@ import {
   assertUserPageTemplateAssetReferences,
   collectUserPageTemplateAssets,
   mergeUserPageTemplateAssets,
+  toUserPageTemplateAssetMetadata,
   validateUserPageTemplateAssets,
+  type UserPageTemplateAssetMetadata,
 } from './user-page-template-assets';
+import type { UserPageTemplateAssetPayloadStore } from './user-page-template-asset-payload-store';
 
 export const USER_PAGE_TEMPLATE_SCHEMA_VERSION = 2 as const;
 export const USER_PAGE_TEMPLATE_STORAGE_KEY = 'live-board:user-page-templates:v2';
 export const USER_PAGE_TEMPLATE_LEGACY_STORAGE_KEY = 'live-board:user-page-templates:v1';
 export const USER_PAGE_TEMPLATE_LIMIT = 50;
-export const USER_PAGE_TEMPLATE_MAX_BYTES = 2 * 1024 * 1024;
-export const USER_PAGE_TEMPLATE_TOTAL_BYTES = 4 * 1024 * 1024;
+export const USER_PAGE_TEMPLATE_MAX_BYTES = 256 * 1024;
+export const USER_PAGE_TEMPLATE_TOTAL_BYTES = 2 * 1024 * 1024;
 
 export interface UserPageTemplatePreview {
   readonly background: string;
@@ -47,7 +49,7 @@ export interface UserPageTemplate {
   readonly updatedAt: string;
   readonly preview: UserPageTemplatePreview;
   readonly page: Page;
-  readonly assets: readonly ProjectAsset[];
+  readonly assets: readonly UserPageTemplateAssetMetadata[];
 }
 
 export interface UserPageTemplateEligibility {
@@ -131,7 +133,9 @@ export function createUserPageTemplate(input: {
       eligibility.reason ?? 'Pageが参照するAssetを保存できません。',
     );
   }
-  const assets = collectUserPageTemplateAssets(input.page, assetLibrary);
+  const assets = toUserPageTemplateAssetMetadata(
+    collectUserPageTemplateAssets(input.page, assetLibrary),
+  );
 
   const snapshotProjectId = `template-project:${input.templateId}`;
   const snapshotPageId = `template-page:${input.templateId}`;
@@ -190,16 +194,21 @@ export function instantiateUserPageTemplate(input: {
   });
 }
 
-export function instantiateUserPageTemplateWithAssets(input: {
+export async function instantiateUserPageTemplateWithAssets(input: {
   readonly template: UserPageTemplate;
   readonly projectId: string;
   readonly pageId: string;
   readonly assetLibrary: ProjectAssetLibrary;
+  readonly assetPayloadStore: UserPageTemplateAssetPayloadStore;
   readonly createdAt: string;
   readonly createLayerId: () => string;
-}): InstantiatedUserPageTemplate {
+}): Promise<InstantiatedUserPageTemplate> {
   const template = validateStoredTemplate(input.template);
-  const assetLibrary = mergeUserPageTemplateAssets(input.assetLibrary, template.assets);
+  const assetLibrary = await mergeUserPageTemplateAssets(
+    input.assetLibrary,
+    template.assets,
+    input.assetPayloadStore,
+  );
   const page = clonePageWithRemappedLayerIds({
     sourcePage: template.page,
     projectId: input.projectId,
@@ -823,7 +832,7 @@ function persistTemplates(
   if (utf8ByteLength(serialized) > USER_PAGE_TEMPLATE_TOTAL_BYTES) {
     throw new UserPageTemplateError(
       'TEMPLATE_STORE_TOO_LARGE',
-      'マイテンプレートの合計保存容量が4MiBを超えます。',
+      'マイテンプレートの合計metadata保存容量が2MiBを超えます。',
     );
   }
 
@@ -957,7 +966,7 @@ function assertTemplateByteSize(template: UserPageTemplate): void {
   if (utf8ByteLength(JSON.stringify(template)) > USER_PAGE_TEMPLATE_MAX_BYTES) {
     throw new UserPageTemplateError(
       'TEMPLATE_TOO_LARGE',
-      'このPageはマイテンプレート1件あたりの保存上限2MiBを超えています。',
+      'このPageはマイテンプレート1件あたりのmetadata保存上限256KiBを超えています。',
     );
   }
 }

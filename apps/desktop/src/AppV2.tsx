@@ -98,6 +98,7 @@ import {
   getUserPageTemplateSaveEligibility,
   instantiateUserPageTemplateWithAssets,
 } from './user-page-templates';
+import { getBrowserUserPageTemplateAssetPayloadStore } from './user-page-template-asset-payload-store';
 import { ProjectTabs } from './ProjectTabs';
 import {
   createProjectTabsState,
@@ -508,7 +509,7 @@ export function AppV2() {
     }
   }
 
-  function addPageFromUserTemplate(templateId: string): void {
+  async function addPageFromUserTemplate(templateId: string): Promise<void> {
     const template = userPageTemplates.templates.find(
       (candidate) => candidate.id === templateId,
     );
@@ -519,11 +520,12 @@ export function AppV2() {
 
     try {
       const createdAt = new Date().toISOString();
-      const instantiated = instantiateUserPageTemplateWithAssets({
+      const instantiated = await instantiateUserPageTemplateWithAssets({
         template,
         projectId: project.id,
         pageId: createEntityId('page'),
         assetLibrary,
+        assetPayloadStore: getBrowserUserPageTemplateAssetPayloadStore(),
         createdAt,
         createLayerId: () => createEntityId('layer-user-template'),
       });
@@ -552,16 +554,16 @@ export function AppV2() {
     }
   }
 
-  function saveEditPageAsUserTemplate(name: string): void {
-    if (userPageTemplates.savePage(editPage, name, assetLibrary)) setDomainError(null);
+  async function saveEditPageAsUserTemplate(name: string): Promise<void> {
+    if (await userPageTemplates.savePage(editPage, name, assetLibrary)) setDomainError(null);
   }
 
-  function deleteUserPageTemplate(templateId: string): void {
-    if (userPageTemplates.removeTemplate(templateId)) setDomainError(null);
+  async function deleteUserPageTemplate(templateId: string): Promise<void> {
+    if (await userPageTemplates.removeTemplate(templateId)) setDomainError(null);
   }
 
-  function restoreDeletedUserPageTemplate(): void {
-    if (userPageTemplates.restoreDeletedTemplate()) setDomainError(null);
+  async function restoreDeletedUserPageTemplate(): Promise<void> {
+    if (await userPageTemplates.restoreDeletedTemplate()) setDomainError(null);
   }
 
   function selectProject(projectId: string): void {

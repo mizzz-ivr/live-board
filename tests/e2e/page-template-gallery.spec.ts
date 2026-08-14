@@ -208,6 +208,32 @@ test('Asset付きPageをマイテンプレートへ保存し、再利用時にAs
   await expect(dialog.getByRole('status')).toContainText('ロゴ付きシーン');
   await expect(dialog.getByText(/Asset 1件/)).toBeVisible();
 
+  const persisted = await page.evaluate(async () => {
+    const metadata = localStorage.getItem('live-board:user-page-templates:v2') ?? '';
+    const binaryAssetCount = await new Promise<number>((resolve, reject) => {
+      const openRequest = indexedDB.open('live-board-user-page-template-assets');
+      openRequest.onerror = () => reject(openRequest.error);
+      openRequest.onsuccess = () => {
+        const database = openRequest.result;
+        const transaction = database.transaction('assets', 'readonly');
+        const countRequest = transaction.objectStore('assets').count();
+        countRequest.onerror = () => reject(countRequest.error);
+        countRequest.onsuccess = () => {
+          const count = countRequest.result;
+          database.close();
+          resolve(count);
+        };
+      };
+    });
+    return {
+      metadata,
+      binaryAssetCount,
+    };
+  });
+  expect(persisted.metadata).not.toContain('data:image/');
+  expect(persisted.metadata).not.toContain('base64,');
+  expect(persisted.binaryAssetCount).toBe(1);
+
   await page.reload();
   await expect(page.getByTestId('canvas-surface')).toBeVisible();
   await expect(assetRows).toHaveCount(0);

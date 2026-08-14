@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { Page, ProjectAssetLibrary } from '@live-board/domain';
 import {
   createUserPageTemplate,
@@ -9,15 +9,22 @@ import {
   type UserPageTemplate,
   type UserPageTemplateStorage,
 } from './user-page-templates';
+import {
+  collectUserPageTemplateAssetReferenceIds,
+  collectUserPageTemplateAssets,
+  garbageCollectUserPageTemplateAssetPayloads,
+  persistUserPageTemplateAssetPayloads,
+} from './user-page-template-assets';
+import { getBrowserUserPageTemplateAssetPayloadStore } from './user-page-template-asset-payload-store';
 
 export interface UserPageTemplateController {
   readonly enabled: boolean;
   readonly templates: readonly UserPageTemplate[];
   readonly message: string | null;
   readonly canRestoreDeleted: boolean;
-  savePage(page: Page, name: string, assetLibrary: ProjectAssetLibrary): boolean;
-  removeTemplate(templateId: string): boolean;
-  restoreDeletedTemplate(): boolean;
+  savePage(page: Page, name: string, assetLibrary: ProjectAssetLibrary): Promise<boolean>;
+  removeTemplate(templateId: string): Promise<boolean>;
+  restoreDeletedTemplate(): Promise<boolean>;
 }
 
 interface UserPageTemplateState {
@@ -30,11 +37,20 @@ interface UserPageTemplateState {
 export function useUserPageTemplates(): UserPageTemplateController {
   const [state, setState] = useState<UserPageTemplateState>(loadInitialState);
 
-  const savePage = useCallback((
+  useEffect(() => {
+    const initial = loadInitialState();
+    if (!initial.enabled) return;
+    void garbageCollectResult({
+      templates: initial.templates,
+      lastDeletedTemplate: initial.lastDeletedTemplate,
+    }).catch(() => undefined);
+  }, []);
+
+  const savePage = useCallback(async (
     page: Page,
     name: string,
     assetLibrary: ProjectAssetLibrary,
-  ): boolean => {
+  ): Promise<boolean> => {
     try {
       const storage = browserStorage();
       const createdAt = new Date().toISOString();
@@ -45,14 +61,30 @@ export function useUserPageTemplates(): UserPageTemplateController {
         assetLibrary,
         createdAt,
       });
-      const result = saveUserPageTemplate(storage, template);
+      const sourceAssets = collectUserPageTemplateAssets(page, assetLibrary);
+      await persistUserPageTemplateAssetPayloads(
+        sourceAssets,
+        getBrowserUserPageTemplateAssetPayloadStore(),
+      );
+      let result;
+      try {
+        result = saveUserPageTemplate(storage, template);
+      } catch (error: unknown) {
+        await garbageCollectCurrentStoreBestEffort();
+        throw error;
+      }
+      const gcWarning = await garbageCollectResult(result).catch(() =>
+        '不要なAssetバイナリの整理に失敗しました。',
+      );
       setState({
         enabled: true,
         templates: result.templates,
         lastDeletedTemplate: result.lastDeletedTemplate,
-        message: result.warnings.length > 0
-          ? `「${template.name}」を保存しました。${result.warnings.join(' ')}`
-          : `「${template.name}」をマイテンプレートへ保存しました。`,
+        message: [
+          `「${template.name}」をマイテンプレートへ保存しました。`,
+          ...result.warnings,
+          ...(gcWarning === undefined ? [] : [gcWarning]),
+        ].join(' '),
       });
       return true;
     } catch (error: unknown) {
@@ -64,17 +96,22 @@ export function useUserPageTemplates(): UserPageTemplateController {
     }
   }, []);
 
-  const removeTemplate = useCallback((templateId: string): boolean => {
+  const removeTemplate = useCallback(async (templateId: string): Promise<boolean> => {
     try {
       const storage = browserStorage();
       const result = deleteUserPageTemplate(storage, templateId);
+      const gcWarning = await garbageCollectResult(result).catch(() =>
+        '不要なAssetバイナリの整理に失敗しました。',
+      );
       setState({
         enabled: true,
         templates: result.templates,
         lastDeletedTemplate: result.lastDeletedTemplate,
-        message: result.warnings.length > 0
-          ? `マイテンプレートを削除しました。${result.warnings.join(' ')}`
-          : 'マイテンプレートを削除しました。',
+        message: [
+          'マイテンプレートを削除しました。',
+          ...result.warnings,
+          ...(gcWarning === undefined ? [] : [gcWarning]),
+        ].join(' '),
       });
       return true;
     } catch (error: unknown) {
@@ -86,16 +123,21 @@ export function useUserPageTemplates(): UserPageTemplateController {
     }
   }, []);
 
-  const restoreDeletedTemplate = useCallback((): boolean => {
+  const restoreDeletedTemplate = useCallback(async (): Promise<boolean> => {
     try {
       const result = restoreLastDeletedUserPageTemplate(browserStorage());
+      const gcWarning = await garbageCollectResult(result).catch(() =>
+        '不要なAssetバイナリの整理に失敗しました。',
+      );
       setState({
         enabled: true,
         templates: result.templates,
         lastDeletedTemplate: result.lastDeletedTemplate,
-        message: result.warnings.length > 0
-          ? `削除したマイテンプレートを復元しました。${result.warnings.join(' ')}`
-          : '削除したマイテンプレートを復元しました。',
+        message: [
+          '削除したマイテンプレートを復元しました。',
+          ...result.warnings,
+          ...(gcWarning === undefined ? [] : [gcWarning]),
+        ].join(' '),
       });
       return true;
     } catch (error: unknown) {
@@ -146,4 +188,27 @@ function browserStorage(): UserPageTemplateStorage {
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
+}
+
+async function garbageCollectResult(result: {
+  readonly templates: readonly UserPageTemplate[];
+  readonly lastDeletedTemplate: UserPageTemplate | null;
+}): Promise<void> {
+  const referenced = collectUserPageTemplateAssetReferenceIds([
+    ...result.templates,
+    ...(result.lastDeletedTemplate === null ? [] : [result.lastDeletedTemplate]),
+  ]);
+  await garbageCollectUserPageTemplateAssetPayloads(
+    getBrowserUserPageTemplateAssetPayloadStore(),
+    referenced,
+  );
+}
+
+async function garbageCollectCurrentStoreBestEffort(): Promise<void> {
+  try {
+    const current = loadUserPageTemplates(browserStorage());
+    await garbageCollectResult(current);
+  } catch {
+    // 将来schemaやストレージ障害時は未知の参照を消さない。
+  }
 }
