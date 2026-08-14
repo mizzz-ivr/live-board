@@ -48,6 +48,28 @@ describe('ProjectAsset', () => {
     expect(sanitized).toContain('<rect');
   });
 
+  it('サニタイズ済みSVGを再処理してもXML entityを二重エスケープしない', () => {
+    const source = `
+      <svg viewBox="0 0 100 100">
+        <text x="10" y="20" font-family="A &amp; B">A &amp; B</text>
+      </svg>`;
+    const first = sanitizeSvg(source);
+    const second = sanitizeSvg(first);
+    expect(second).toBe(first);
+    expect(second).toContain('font-family="A &amp; B"');
+    expect(second).not.toContain('&amp;amp;');
+  });
+
+  it('数値文字参照は既存entityとして扱わず無害化する', () => {
+    const source = `
+      <svg viewBox="0 0 10 10">
+        <image href="jav&#x61;script:alert(1)" width="1" height="1" />
+      </svg>`;
+    const sanitized = sanitizeSvg(source);
+    expect(sanitized).not.toContain('href=');
+    expect(sanitized).not.toContain('javascript:');
+  });
+
   it('DOCTYPE・ENTITYを含むSVGを拒否する', () => {
     expect(() => sanitizeSvg(`<!DOCTYPE svg [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><svg viewBox="0 0 1 1"><text>&xxe;</text></svg>`))
       .toThrowError(AssetValidationError);

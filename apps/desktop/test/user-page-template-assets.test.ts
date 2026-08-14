@@ -139,6 +139,33 @@ describe('Asset付きマイPageテンプレート', () => {
     expect(eligibility.reason).toContain('Assetが見つかりません');
   });
 
+  it('XML entityを含む安全なSVG Assetを保存・再読込できる', () => {
+    const storage = new MemoryStorage();
+    const svg = new TextEncoder().encode(`
+      <svg viewBox="0 0 100 100">
+        <text x="10" y="20" font-family="A &amp; B">SAFE</text>
+      </svg>`);
+    const imported = importProjectAsset(createProjectAssetLibrary(), {
+      fileName: 'entity.svg',
+      declaredMime: 'image/svg+xml',
+      bytes: svg,
+      createdAt: '2026-08-14T00:00:00.000Z',
+    });
+    const template = createUserPageTemplate({
+      templateId: 'user-template:svg-entity',
+      name: 'SVG entity',
+      page: imagePage(imported.asset.id),
+      assetLibrary: imported.library,
+      createdAt: '2026-08-14T00:10:00.000Z',
+    });
+    saveUserPageTemplate(storage, template);
+
+    const loaded = loadUserPageTemplates(storage);
+    expect(loaded.warnings).toEqual([]);
+    expect(loaded.templates).toHaveLength(1);
+    expect(loaded.templates[0]?.assets[0]?.dataUrl).toBe(template.assets[0]?.dataUrl);
+  });
+
   it('改ざんされた同梱Assetだけを含むテンプレートを読み込み時に除外する', () => {
     const storage = new MemoryStorage();
     const sourceLibrary = assetLibrary();
