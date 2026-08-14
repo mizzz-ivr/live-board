@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { Page, ProjectAssetLibrary } from '@live-board/domain';
 import {
   createUserPageTemplate,
@@ -36,12 +36,22 @@ interface UserPageTemplateState {
 
 export function useUserPageTemplates(): UserPageTemplateController {
   const [state, setState] = useState<UserPageTemplateState>(loadInitialState);
+  const mutationQueue = useRef<Promise<void>>(Promise.resolve());
 
-  const savePage = useCallback(async (
+  const runSerialized = useCallback(<T>(operation: () => Promise<T>): Promise<T> => {
+    const result = mutationQueue.current.then(operation, operation);
+    mutationQueue.current = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }, []);
+
+  const savePage = useCallback((
     page: Page,
     name: string,
     assetLibrary: ProjectAssetLibrary,
-  ): Promise<boolean> => {
+  ): Promise<boolean> => runSerialized(async () => {
     try {
       const storage = browserStorage();
       await garbageCollectCurrentStoreBestEffort();
@@ -59,6 +69,7 @@ export function useUserPageTemplates(): UserPageTemplateController {
         sourceAssets,
         getBrowserUserPageTemplateAssetPayloadStore(),
       );
+
       let result;
       try {
         result = saveUserPageTemplate(storage, template);
@@ -66,7 +77,8 @@ export function useUserPageTemplates(): UserPageTemplateController {
         await garbageCollectCurrentStoreBestEffort();
         throw error;
       }
-      const gcWarning = await garbageCollectResult(result).catch(() =>
+
+      const gcWarning = await garbageCollectCurrentStore().catch(() =>
         '不要なAssetバイナリの整理に失敗しました。',
       );
       setState({
@@ -87,60 +99,66 @@ export function useUserPageTemplates(): UserPageTemplateController {
       }));
       return false;
     }
-  }, []);
+  }), [runSerialized]);
 
-  const removeTemplate = useCallback(async (templateId: string): Promise<boolean> => {
-    try {
-      const storage = browserStorage();
-      const result = deleteUserPageTemplate(storage, templateId);
-      const gcWarning = await garbageCollectResult(result).catch(() =>
-        '不要なAssetバイナリの整理に失敗しました。',
-      );
-      setState({
-        enabled: true,
-        templates: result.templates,
-        lastDeletedTemplate: result.lastDeletedTemplate,
-        message: [
-          'マイテンプレートを削除しました。',
-          ...result.warnings,
-          ...(gcWarning === undefined ? [] : [gcWarning]),
-        ].join(' '),
-      });
-      return true;
-    } catch (error: unknown) {
-      setState((current) => ({
-        ...current,
-        message: errorMessage(error, 'マイテンプレートの削除に失敗しました。'),
-      }));
-      return false;
-    }
-  }, []);
+  const removeTemplate = useCallback(
+    (templateId: string): Promise<boolean> => runSerialized(async () => {
+      try {
+        const storage = browserStorage();
+        const result = deleteUserPageTemplate(storage, templateId);
+        const gcWarning = await garbageCollectCurrentStore().catch(() =>
+          '不要なAssetバイナリの整理に失敗しました。',
+        );
+        setState({
+          enabled: true,
+          templates: result.templates,
+          lastDeletedTemplate: result.lastDeletedTemplate,
+          message: [
+            'マイテンプレートを削除しました。',
+            ...result.warnings,
+            ...(gcWarning === undefined ? [] : [gcWarning]),
+          ].join(' '),
+        });
+        return true;
+      } catch (error: unknown) {
+        setState((current) => ({
+          ...current,
+          message: errorMessage(error, 'マイテンプレートの削除に失敗しました。'),
+        }));
+        return false;
+      }
+    }),
+    [runSerialized],
+  );
 
-  const restoreDeletedTemplate = useCallback(async (): Promise<boolean> => {
-    try {
-      const result = restoreLastDeletedUserPageTemplate(browserStorage());
-      const gcWarning = await garbageCollectResult(result).catch(() =>
-        '不要なAssetバイナリの整理に失敗しました。',
-      );
-      setState({
-        enabled: true,
-        templates: result.templates,
-        lastDeletedTemplate: result.lastDeletedTemplate,
-        message: [
-          '削除したマイテンプレートを復元しました。',
-          ...result.warnings,
-          ...(gcWarning === undefined ? [] : [gcWarning]),
-        ].join(' '),
-      });
-      return true;
-    } catch (error: unknown) {
-      setState((current) => ({
-        ...current,
-        message: errorMessage(error, 'マイテンプレートの復元に失敗しました。'),
-      }));
-      return false;
-    }
-  }, []);
+  const restoreDeletedTemplate = useCallback(
+    (): Promise<boolean> => runSerialized(async () => {
+      try {
+        const result = restoreLastDeletedUserPageTemplate(browserStorage());
+        const gcWarning = await garbageCollectCurrentStore().catch(() =>
+          '不要なAssetバイナリの整理に失敗しました。',
+        );
+        setState({
+          enabled: true,
+          templates: result.templates,
+          lastDeletedTemplate: result.lastDeletedTemplate,
+          message: [
+            '削除したマイテンプレートを復元しました。',
+            ...result.warnings,
+            ...(gcWarning === undefined ? [] : [gcWarning]),
+          ].join(' '),
+        });
+        return true;
+      } catch (error: unknown) {
+        setState((current) => ({
+          ...current,
+          message: errorMessage(error, 'マイテンプレートの復元に失敗しました。'),
+        }));
+        return false;
+      }
+    }),
+    [runSerialized],
+  );
 
   return {
     enabled: state.enabled,
@@ -197,10 +215,14 @@ async function garbageCollectResult(result: {
   );
 }
 
+async function garbageCollectCurrentStore(): Promise<void> {
+  const current = loadUserPageTemplates(browserStorage());
+  await garbageCollectResult(current);
+}
+
 async function garbageCollectCurrentStoreBestEffort(): Promise<void> {
   try {
-    const current = loadUserPageTemplates(browserStorage());
-    await garbageCollectResult(current);
+    await garbageCollectCurrentStore();
   } catch {
     // 将来schemaやストレージ障害時は未知の参照を消さない。
   }
