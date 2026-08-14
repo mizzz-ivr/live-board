@@ -8,9 +8,25 @@ import {
   type ProjectAssetLibrary,
   type ProjectAssetMime,
 } from '@live-board/domain';
+import type {
+  UserPageTemplateAssetPayloadStore,
+} from './user-page-template-asset-payload-store';
 
 export const USER_PAGE_TEMPLATE_ASSET_MAX_BYTES = 1024 * 1024;
 export const USER_PAGE_TEMPLATE_ASSET_MAX_COUNT = 100;
+
+export interface UserPageTemplateAssetMetadata {
+  readonly id: string;
+  readonly sha256: string;
+  readonly mime: ProjectAssetMime;
+  readonly width: number;
+  readonly height: number;
+  readonly byteLength: number;
+  readonly fileNames: readonly string[];
+  readonly animated: false;
+  readonly sanitized: boolean;
+  readonly createdAt: string;
+}
 
 const SUPPORTED_MIMES = new Set<ProjectAssetMime>([
   'image/png',
@@ -41,14 +57,38 @@ export function collectUserPageTemplateAssets(
   return assets.map(cloneAsset);
 }
 
-export function validateUserPageTemplateAssets(value: unknown): ProjectAsset[] {
+export function toUserPageTemplateAssetMetadata(
+  assets: readonly ProjectAsset[],
+): UserPageTemplateAssetMetadata[] {
+  assertAssetLimits(
+    assets.length,
+    assets.reduce((total, asset) => total + asset.byteLength, 0),
+  );
+  return assets.map((asset) => ({
+    id: asset.id,
+    sha256: asset.sha256,
+    mime: asset.mime,
+    width: asset.width,
+    height: asset.height,
+    byteLength: asset.byteLength,
+    fileNames: [...asset.fileNames],
+    animated: false,
+    sanitized: asset.sanitized,
+    createdAt: asset.createdAt,
+  }));
+}
+
+export function validateUserPageTemplateAssets(
+  value: unknown,
+): UserPageTemplateAssetMetadata[] {
   if (!Array.isArray(value)) throw new Error('INVALID_TEMPLATE_ASSETS');
   if (value.length > USER_PAGE_TEMPLATE_ASSET_MAX_COUNT) {
     throw new Error('マイテンプレートに含められるAsset数を超えています。');
   }
 
-  let library = createProjectAssetLibrary();
+  const result: UserPageTemplateAssetMetadata[] = [];
   const seenSha256 = new Set<string>();
+  let totalBytes = 0;
 
   for (const candidate of value) {
     if (!isRecord(candidate)) throw new Error('INVALID_TEMPLATE_ASSET');
@@ -64,53 +104,105 @@ export function validateUserPageTemplateAssets(value: unknown): ProjectAsset[] {
     const width = requiredPositiveNumber(candidate.width);
     const height = requiredPositiveNumber(candidate.height);
     const byteLength = requiredPositiveInteger(candidate.byteLength);
-    const dataUrl = requiredString(candidate.dataUrl);
     const fileNames = validateFileNames(candidate.fileNames);
     if (candidate.animated !== false || typeof candidate.sanitized !== 'boolean') {
       throw new Error('INVALID_TEMPLATE_ASSET_METADATA');
     }
     const createdAt = requiredString(candidate.createdAt);
-    const bytes = decodeDataUrl(dataUrl, mime);
-    if (bytes.byteLength !== byteLength) throw new Error('INVALID_TEMPLATE_ASSET_BYTES');
-
-    let result = importProjectAsset(library, {
-      fileName: fileNames[0]!,
-      declaredMime: mime,
-      bytes,
+    totalBytes += byteLength;
+    result.push({
+      id,
+      sha256,
+      mime,
+      width,
+      height,
+      byteLength,
+      fileNames,
+      animated: false,
+      sanitized: candidate.sanitized,
       createdAt,
     });
-    for (const fileName of fileNames.slice(1)) {
-      result = importProjectAsset(result.library, {
+  }
+
+  assertAssetLimits(result.length, totalBytes);
+  return result;
+}
+
+export async function persistUserPageTemplateAssetPayloads(
+  assets: readonly ProjectAsset[],
+  payloadStore: UserPageTemplateAssetPayloadStore,
+): Promise<void> {
+  if (assets.length === 0) return;
+  const validated = assets.map((asset) => validateProjectAssetForPayload(asset));
+  await payloadStore.putMany(
+    validated.map((asset) => ({
+      assetId: asset.id,
+      bytes: decodeDataUrl(asset.dataUrl, asset.mime),
+    })),
+  );
+}
+
+export async function hydrateUserPageTemplateAssets(
+  metadata: readonly UserPageTemplateAssetMetadata[],
+  payloadStore: UserPageTemplateAssetPayloadStore,
+): Promise<ProjectAsset[]> {
+  const validatedMetadata = validateUserPageTemplateAssets(metadata);
+  let library = createProjectAssetLibrary();
+
+  for (const item of validatedMetadata) {
+    const bytes = await payloadStore.get(item.id);
+    if (bytes === null) {
+      throw new Error(`マイテンプレートのAssetバイナリが見つかりません: ${item.id}`);
+    }
+    if (bytes.byteLength !== item.byteLength) {
+      throw new Error(`マイテンプレートのAssetサイズが一致しません: ${item.id}`);
+    }
+
+    let imported = importProjectAsset(library, {
+      fileName: item.fileNames[0]!,
+      declaredMime: item.mime,
+      bytes,
+      createdAt: item.createdAt,
+    });
+    for (const fileName of item.fileNames.slice(1)) {
+      imported = importProjectAsset(imported.library, {
         fileName,
-        declaredMime: mime,
+        declaredMime: item.mime,
         bytes,
-        createdAt,
+        createdAt: item.createdAt,
       });
     }
 
-    const canonical = result.asset;
+    const canonical = imported.asset;
     if (
-      canonical.id !== id
-      || canonical.sha256 !== sha256
-      || canonical.mime !== mime
-      || canonical.width !== width
-      || canonical.height !== height
-      || canonical.byteLength !== byteLength
-      || canonical.dataUrl !== dataUrl
-      || canonical.sanitized !== candidate.sanitized
+      canonical.id !== item.id
+      || canonical.sha256 !== item.sha256
+      || canonical.mime !== item.mime
+      || canonical.width !== item.width
+      || canonical.height !== item.height
+      || canonical.byteLength !== item.byteLength
+      || canonical.sanitized !== item.sanitized
+      || canonical.dataUrl !== encodeDataUrl(bytes, item.mime)
     ) {
-      throw new Error('INVALID_TEMPLATE_ASSET_INTEGRITY');
+      throw new Error(`マイテンプレートAssetの整合性検証に失敗しました: ${item.id}`);
     }
-    library = result.library;
+    library = imported.library;
   }
 
   assertAssetLimits(library.assets.length, library.totalBytes);
   return library.assets.map(cloneAsset);
 }
 
+export async function validateUserPageTemplateAssetPayloads(
+  metadata: readonly UserPageTemplateAssetMetadata[],
+  payloadStore: UserPageTemplateAssetPayloadStore,
+): Promise<void> {
+  await hydrateUserPageTemplateAssets(metadata, payloadStore);
+}
+
 export function assertUserPageTemplateAssetReferences(
   page: Page,
-  assets: readonly ProjectAsset[],
+  assets: readonly UserPageTemplateAssetMetadata[],
 ): void {
   const referencedIds = referencedAssetIds(page);
   const assetIds = new Set(assets.map((asset) => asset.id));
@@ -127,36 +219,55 @@ export function assertUserPageTemplateAssetReferences(
   }
 }
 
-export function mergeUserPageTemplateAssets(
+export async function mergeUserPageTemplateAssets(
   targetLibrary: ProjectAssetLibrary,
-  assets: readonly ProjectAsset[],
-): ProjectAssetLibrary {
-  const validated = validateUserPageTemplateAssets(assets);
+  metadata: readonly UserPageTemplateAssetMetadata[],
+  payloadStore: UserPageTemplateAssetPayloadStore,
+): Promise<ProjectAssetLibrary> {
+  const assets = await hydrateUserPageTemplateAssets(metadata, payloadStore);
   let nextLibrary = targetLibrary;
 
-  for (const asset of validated) {
+  for (const asset of assets) {
     const bytes = decodeDataUrl(asset.dataUrl, asset.mime);
-    let result = importProjectAsset(nextLibrary, {
+    let imported = importProjectAsset(nextLibrary, {
       fileName: asset.fileNames[0]!,
       declaredMime: asset.mime,
       bytes,
       createdAt: asset.createdAt,
     });
     for (const fileName of asset.fileNames.slice(1)) {
-      result = importProjectAsset(result.library, {
+      imported = importProjectAsset(imported.library, {
         fileName,
         declaredMime: asset.mime,
         bytes,
         createdAt: asset.createdAt,
       });
     }
-    if (result.asset.id !== asset.id || result.asset.sha256 !== asset.sha256) {
+    if (imported.asset.id !== asset.id || imported.asset.sha256 !== asset.sha256) {
       throw new Error('Assetの再検証結果がテンプレートと一致しません。');
     }
-    nextLibrary = result.library;
+    nextLibrary = imported.library;
   }
 
   return nextLibrary;
+}
+
+export async function garbageCollectUserPageTemplateAssetPayloads(
+  payloadStore: UserPageTemplateAssetPayloadStore,
+  referencedAssetIds: ReadonlySet<string>,
+): Promise<void> {
+  const storedIds = await payloadStore.listAssetIds();
+  await payloadStore.deleteMany(
+    storedIds.filter((assetId) => !referencedAssetIds.has(assetId)),
+  );
+}
+
+export function collectUserPageTemplateAssetReferenceIds(
+  templates: readonly { readonly assets: readonly UserPageTemplateAssetMetadata[] }[],
+): Set<string> {
+  return new Set(
+    templates.flatMap((template) => template.assets.map((asset) => asset.id)),
+  );
 }
 
 function referencedAssetIds(page: Page): Set<string> {
@@ -170,6 +281,15 @@ function referencedAssetIds(page: Page): Set<string> {
     }
   }
   return result;
+}
+
+function validateProjectAssetForPayload(asset: ProjectAsset): ProjectAsset {
+  const metadata = toUserPageTemplateAssetMetadata([asset])[0]!;
+  const bytes = decodeDataUrl(asset.dataUrl, metadata.mime);
+  if (bytes.byteLength !== metadata.byteLength) {
+    throw new Error(`Assetバイナリサイズがmetadataと一致しません: ${asset.id}`);
+  }
+  return cloneAsset(asset);
 }
 
 function assertAssetLimits(count: number, totalBytes: number): void {
@@ -213,6 +333,12 @@ function decodeDataUrl(dataUrl: string, mime: ProjectAssetMime): Uint8Array {
     throw new Error('INVALID_TEMPLATE_ASSET_BASE64');
   }
   return Uint8Array.from(decoded, (character) => character.charCodeAt(0));
+}
+
+function encodeDataUrl(bytes: Uint8Array, mime: ProjectAssetMime): string {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return `data:${mime};base64,${globalThis.btoa(binary)}`;
 }
 
 function cloneAsset(asset: ProjectAsset): ProjectAsset {
