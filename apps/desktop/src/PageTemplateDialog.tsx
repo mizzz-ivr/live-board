@@ -10,6 +10,11 @@ import {
   BUILT_IN_PAGE_TEMPLATES,
   type BuiltInPageTemplateId,
 } from './page-templates';
+import {
+  createUserPageTemplateExportFile,
+  downloadUserPageTemplateExportFile,
+} from './user-page-template-export';
+import { getBrowserUserPageTemplateAssetPayloadStore } from './user-page-template-asset-payload-store';
 import type { UserPageTemplate } from './user-page-templates';
 import './page-template-dialog.css';
 
@@ -49,6 +54,9 @@ export function PageTemplateDialog({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const firstTemplateRef = useRef<HTMLButtonElement>(null);
   const [templateName, setTemplateName] = useState(currentPageName);
+  const [exportingTemplateId, setExportingTemplateId] = useState<string | null>(null);
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const interactionBusy = busy || exportingTemplateId !== null;
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -56,6 +64,7 @@ export function PageTemplateDialog({
 
     if (open) {
       setTemplateName(currentPageName);
+      setExportMessage(null);
       if (!dialog.open) dialog.showModal();
       window.requestAnimationFrame(() => firstTemplateRef.current?.focus());
       return;
@@ -65,14 +74,39 @@ export function PageTemplateDialog({
   }, [currentPageName, open]);
 
   function handleBackdropClick(event: MouseEvent<HTMLDialogElement>): void {
-    if (!busy && event.target === event.currentTarget) onRequestClose();
+    if (!interactionBusy && event.target === event.currentTarget) onRequestClose();
   }
 
   function handleSave(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
-    if (busy || !canSaveCurrentPage) return;
+    if (interactionBusy || !canSaveCurrentPage) return;
     onSaveCurrentPage(templateName);
   }
+
+  async function handleExport(template: UserPageTemplate): Promise<void> {
+    if (interactionBusy) return;
+    setExportingTemplateId(template.id);
+    setExportMessage(null);
+    try {
+      const file = await createUserPageTemplateExportFile({
+        template,
+        assetPayloadStore: getBrowserUserPageTemplateAssetPayloadStore(),
+        exportedAt: new Date().toISOString(),
+      });
+      downloadUserPageTemplateExportFile(file);
+      setExportMessage(`「${template.name}」を書き出しました。`);
+    } catch (error: unknown) {
+      setExportMessage(
+        error instanceof Error
+          ? error.message
+          : 'マイテンプレートの書き出しに失敗しました。',
+      );
+    } finally {
+      setExportingTemplateId(null);
+    }
+  }
+
+  const statusMessage = exportMessage ?? userTemplateMessage;
 
   return (
     <dialog
@@ -80,10 +114,10 @@ export function PageTemplateDialog({
       className="page-template-dialog"
       aria-labelledby="page-template-dialog-title"
       aria-describedby="page-template-dialog-description"
-      aria-busy={busy}
+      aria-busy={interactionBusy}
       onCancel={(event) => {
         event.preventDefault();
-        if (!busy) onRequestClose();
+        if (!interactionBusy) onRequestClose();
       }}
       onClick={handleBackdropClick}
     >
@@ -93,13 +127,13 @@ export function PageTemplateDialog({
             <p className="page-template-dialog-eyebrow">Scene library</p>
             <h2 id="page-template-dialog-title">Pageテンプレート</h2>
             <p id="page-template-dialog-description">
-              ビルトインシーンの利用と、現在のPageをマイテンプレートとして再利用できます。
+              ビルトインシーンの利用と、現在のPageをマイテンプレートとして保存・再利用できます。
             </p>
           </div>
           <button
             type="button"
             className="page-template-dialog-close"
-            disabled={busy}
+            disabled={interactionBusy}
             onClick={onRequestClose}
           >
             閉じる
@@ -121,24 +155,24 @@ export function PageTemplateDialog({
                 type="text"
                 value={templateName}
                 maxLength={80}
-                disabled={busy}
+                disabled={interactionBusy}
                 onChange={(event) => setTemplateName(event.currentTarget.value)}
               />
             </label>
-            <button type="submit" disabled={busy || !canSaveCurrentPage}>
+            <button type="submit" disabled={interactionBusy || !canSaveCurrentPage}>
               現在のPageをマイテンプレートに保存
             </button>
           </div>
           {saveDisabledReason !== null ? (
             <p className="page-template-warning">{saveDisabledReason}</p>
           ) : null}
-          {busy ? (
+          {interactionBusy ? (
             <p className="page-template-status" role="status" aria-live="polite">
               テンプレートを処理しています。完了するまでこの画面を閉じられません。
             </p>
-          ) : userTemplateMessage !== null ? (
+          ) : statusMessage !== null ? (
             <p className="page-template-status" role="status" aria-live="polite">
-              {userTemplateMessage}
+              {statusMessage}
             </p>
           ) : null}
         </form>
@@ -158,7 +192,7 @@ export function PageTemplateDialog({
                 type="button"
                 className="page-template-card"
                 aria-label={`${template.name}テンプレートでPageを作成`}
-                disabled={busy}
+                disabled={interactionBusy}
                 onClick={() => onCreate(template.id)}
               >
                 <TemplatePreview preview={template.preview} />
@@ -176,11 +210,11 @@ export function PageTemplateDialog({
           <div className="page-template-section-heading">
             <div>
               <h3 id="user-template-heading">マイテンプレート</h3>
-              <p>自分で保存したPageを、別Projectや別Workspaceでも再利用できます。</p>
+              <p>自分で保存したPageを、別Projectや別Workspaceでも再利用・書き出しできます。</p>
             </div>
             <button
               type="button"
-              disabled={busy || !canRestoreDeleted}
+              disabled={interactionBusy || !canRestoreDeleted}
               onClick={onRestoreDeletedTemplate}
             >
               削除を元に戻す
@@ -196,7 +230,7 @@ export function PageTemplateDialog({
                     type="button"
                     className="page-template-card"
                     aria-label={`${template.name}マイテンプレートでPageを作成`}
-                    disabled={busy}
+                    disabled={interactionBusy}
                     onClick={() => onCreateUserTemplate(template.id)}
                   >
                     <TemplatePreview preview={template.preview} />
@@ -206,23 +240,34 @@ export function PageTemplateDialog({
                       <small>Asset {template.assets.length}件 · {new Date(template.createdAt).toLocaleString()}</small>
                     </span>
                   </button>
-                  <button
-                    type="button"
-                    className="page-template-delete"
-                    aria-label={`${template.name}マイテンプレートを削除`}
-                    disabled={busy}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `マイテンプレート「${template.name}」を削除します。\n削除後は「削除を元に戻す」から直前の1件を復元できます。`,
-                        )
-                      ) {
-                        onDeleteUserTemplate(template.id);
-                      }
-                    }}
-                  >
-                    削除
-                  </button>
+                  <div className="page-template-user-actions">
+                    <button
+                      type="button"
+                      className="page-template-export"
+                      aria-label={`${template.name}マイテンプレートを書き出す`}
+                      disabled={interactionBusy}
+                      onClick={() => void handleExport(template)}
+                    >
+                      書き出す
+                    </button>
+                    <button
+                      type="button"
+                      className="page-template-delete"
+                      aria-label={`${template.name}マイテンプレートを削除`}
+                      disabled={interactionBusy}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `マイテンプレート「${template.name}」を削除します。\n削除後は「削除を元に戻す」から直前の1件を復元できます。`,
+                          )
+                        ) {
+                          onDeleteUserTemplate(template.id);
+                        }
+                      }}
+                    >
+                      削除
+                    </button>
+                  </div>
                 </article>
               ))}
             </div>
