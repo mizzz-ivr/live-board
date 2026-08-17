@@ -80,6 +80,7 @@ export function PageTemplateDialog({
   function handleSave(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     if (interactionBusy || !canSaveCurrentPage) return;
+    setExportMessage(null);
     onSaveCurrentPage(templateName);
   }
 
@@ -193,7 +194,10 @@ export function PageTemplateDialog({
                 className="page-template-card"
                 aria-label={`${template.name}テンプレートでPageを作成`}
                 disabled={interactionBusy}
-                onClick={() => onCreate(template.id)}
+                onClick={() => {
+                  setExportMessage(null);
+                  onCreate(template.id);
+                }}
               >
                 <TemplatePreview preview={template.preview} />
                 <span className="page-template-card-copy">
@@ -215,7 +219,10 @@ export function PageTemplateDialog({
             <button
               type="button"
               disabled={interactionBusy || !canRestoreDeleted}
-              onClick={onRestoreDeletedTemplate}
+              onClick={() => {
+                setExportMessage(null);
+                onRestoreDeletedTemplate();
+              }}
             >
               削除を元に戻す
             </button>
@@ -231,7 +238,10 @@ export function PageTemplateDialog({
                     className="page-template-card"
                     aria-label={`${template.name}マイテンプレートでPageを作成`}
                     disabled={interactionBusy}
-                    onClick={() => onCreateUserTemplate(template.id)}
+                    onClick={() => {
+                      setExportMessage(null);
+                      onCreateUserTemplate(template.id);
+                    }}
                   >
                     <TemplatePreview preview={template.preview} />
                     <span className="page-template-card-copy">
@@ -261,6 +271,7 @@ export function PageTemplateDialog({
                             `マイテンプレート「${template.name}」を削除します。\n削除後は「削除を元に戻す」から直前の1件を復元できます。`,
                           )
                         ) {
+                          setExportMessage(null);
                           onDeleteUserTemplate(template.id);
                         }
                       }}
