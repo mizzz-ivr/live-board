@@ -150,11 +150,9 @@ export function downloadUserPageTemplateExportFile(
     throw new Error('この環境ではマイテンプレートを書き出せません。');
   }
 
-  const rawBytes = file.bytes.buffer.slice(
-    file.bytes.byteOffset,
-    file.bytes.byteOffset + file.bytes.byteLength,
-  );
-  const blob = new Blob([rawBytes], { type: file.mime });
+  const rawBytes = new Uint8Array(file.bytes.byteLength);
+  rawBytes.set(file.bytes);
+  const blob = new Blob([rawBytes.buffer], { type: file.mime });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
