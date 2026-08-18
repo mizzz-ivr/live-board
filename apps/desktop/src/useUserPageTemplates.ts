@@ -16,7 +16,10 @@ import {
   persistUserPageTemplateAssetPayloads,
 } from './user-page-template-assets';
 import { getBrowserUserPageTemplateAssetPayloadStore } from './user-page-template-asset-payload-store';
-import { readUserPageTemplateImportFile } from './user-page-template-import';
+import {
+  createLocalUserPageTemplateFromImport,
+  readUserPageTemplateImportFile,
+} from './user-page-template-import';
 
 export interface UserPageTemplateController {
   readonly enabled: boolean;
@@ -110,13 +113,10 @@ export function useUserPageTemplates(): UserPageTemplateController {
         const storage = browserStorage();
         await garbageCollectCurrentStoreBestEffort();
 
-        const createdAt = new Date().toISOString();
-        const template = createUserPageTemplate({
+        const template = createLocalUserPageTemplateFromImport({
+          imported,
           templateId: `user-template:${globalThis.crypto.randomUUID()}`,
-          name: imported.sourceTemplate.name,
-          page: imported.sourceTemplate.page,
-          assetLibrary: imported.assetLibrary,
-          createdAt,
+          createdAt: new Date().toISOString(),
         });
         await persistUserPageTemplateAssetPayloads(
           imported.assetLibrary.assets,
