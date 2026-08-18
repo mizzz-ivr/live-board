@@ -1,6 +1,9 @@
 import type { ProjectAssetLibrary } from '@live-board/domain';
 import {
+  collectUserPageTemplateAssetReferenceIds,
+  garbageCollectUserPageTemplateAssetPayloads,
   hydrateUserPageTemplateAssets,
+  persistUserPageTemplateAssetPayloads,
   type UserPageTemplateAssetMetadata,
 } from './user-page-template-assets';
 import type {
@@ -18,7 +21,9 @@ import {
   USER_PAGE_TEMPLATE_STORAGE_KEY,
   createUserPageTemplate,
   loadUserPageTemplates,
+  saveUserPageTemplate,
   type UserPageTemplate,
+  type UserPageTemplateLoadResult,
   type UserPageTemplateStorage,
 } from './user-page-templates';
 
@@ -34,6 +39,11 @@ export interface ValidatedUserPageTemplateImport {
   readonly sourceTemplate: UserPageTemplate;
   readonly assetLibrary: ProjectAssetLibrary;
   readonly exportedAt: string;
+}
+
+export interface PersistedUserPageTemplateImport {
+  readonly template: UserPageTemplate;
+  readonly result: UserPageTemplateLoadResult;
 }
 
 interface ImportAssetEntry {
@@ -165,6 +175,35 @@ export function createLocalUserPageTemplateFromImport(input: {
   });
 }
 
+export async function persistValidatedUserPageTemplateImport(input: {
+  readonly imported: ValidatedUserPageTemplateImport;
+  readonly storage: UserPageTemplateStorage;
+  readonly assetPayloadStore: UserPageTemplateAssetPayloadStore;
+  readonly templateId: string;
+  readonly createdAt: string;
+}): Promise<PersistedUserPageTemplateImport> {
+  const template = createLocalUserPageTemplateFromImport({
+    imported: input.imported,
+    templateId: input.templateId,
+    createdAt: input.createdAt,
+  });
+
+  await persistUserPageTemplateAssetPayloads(
+    input.imported.assetLibrary.assets,
+    input.assetPayloadStore,
+  );
+
+  try {
+    return {
+      template,
+      result: saveUserPageTemplate(input.storage, template),
+    };
+  } catch (error: unknown) {
+    await garbageCollectImportPayloadsBestEffort(input.storage, input.assetPayloadStore);
+    throw error;
+  }
+}
+
 function validateTemplateCandidate(value: unknown): UserPageTemplate {
   const storage = new TemplateValidationStorage(value);
   const result = loadUserPageTemplates(storage);
@@ -231,6 +270,22 @@ function validateAssetEntries(
   }
 
   return entries;
+}
+
+async function garbageCollectImportPayloadsBestEffort(
+  storage: UserPageTemplateStorage,
+  payloadStore: UserPageTemplateAssetPayloadStore,
+): Promise<void> {
+  try {
+    const current = loadUserPageTemplates(storage);
+    const referenced = collectUserPageTemplateAssetReferenceIds([
+      ...current.templates,
+      ...(current.lastDeletedTemplate === null ? [] : [current.lastDeletedTemplate]),
+    ]);
+    await garbageCollectUserPageTemplateAssetPayloads(payloadStore, referenced);
+  } catch {
+    // 未知schemaやstorage障害時は既存参照を推測してbinaryを削除しない。
+  }
 }
 
 class ReadOnlyPayloadStore implements UserPageTemplateAssetPayloadStore {
