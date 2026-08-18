@@ -17,7 +17,7 @@ import {
 } from './user-page-template-assets';
 import { getBrowserUserPageTemplateAssetPayloadStore } from './user-page-template-asset-payload-store';
 import {
-  createLocalUserPageTemplateFromImport,
+  persistValidatedUserPageTemplateImport,
   readUserPageTemplateImportFile,
 } from './user-page-template-import';
 
@@ -111,36 +111,26 @@ export function useUserPageTemplates(): UserPageTemplateController {
       try {
         const imported = await readUserPageTemplateImportFile(file);
         const storage = browserStorage();
+        const assetPayloadStore = getBrowserUserPageTemplateAssetPayloadStore();
         await garbageCollectCurrentStoreBestEffort();
 
-        const template = createLocalUserPageTemplateFromImport({
+        const persisted = await persistValidatedUserPageTemplateImport({
           imported,
+          storage,
+          assetPayloadStore,
           templateId: `user-template:${globalThis.crypto.randomUUID()}`,
           createdAt: new Date().toISOString(),
         });
-        await persistUserPageTemplateAssetPayloads(
-          imported.assetLibrary.assets,
-          getBrowserUserPageTemplateAssetPayloadStore(),
-        );
-
-        let result;
-        try {
-          result = saveUserPageTemplate(storage, template);
-        } catch (error: unknown) {
-          await garbageCollectCurrentStoreBestEffort();
-          throw error;
-        }
-
         const gcWarning = await garbageCollectCurrentStore().catch(() =>
           '不要なAssetバイナリの整理に失敗しました。',
         );
         setState({
           enabled: true,
-          templates: result.templates,
-          lastDeletedTemplate: result.lastDeletedTemplate,
+          templates: persisted.result.templates,
+          lastDeletedTemplate: persisted.result.lastDeletedTemplate,
           message: [
-            `「${template.name}」を読み込みました。Asset ${template.assets.length}件。`,
-            ...result.warnings,
+            `「${persisted.template.name}」を読み込みました。Asset ${persisted.template.assets.length}件。`,
+            ...persisted.result.warnings,
             ...(gcWarning === undefined ? [] : [gcWarning]),
           ].join(' '),
         });
