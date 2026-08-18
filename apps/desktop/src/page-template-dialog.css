@@ -167,15 +167,29 @@
   padding-bottom: 46px;
 }
 
-.page-template-delete {
+.page-template-user-actions {
   position: absolute;
   right: 12px;
   bottom: 10px;
   z-index: 1;
+  display: flex;
+  gap: 8px;
+}
+
+.page-template-export,
+.page-template-delete {
   padding: 5px 10px;
+  font-size: 11px;
+}
+
+.page-template-export {
+  border-color: rgba(96, 165, 250, 0.35);
+  color: #bfdbfe;
+}
+
+.page-template-delete {
   border-color: rgba(248, 113, 113, 0.35);
   color: #fecaca;
-  font-size: 11px;
 }
 
 .page-template-preview {
