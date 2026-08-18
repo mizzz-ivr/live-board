@@ -16,6 +16,7 @@ import {
 import {
   USER_PAGE_TEMPLATE_SCHEMA_VERSION,
   USER_PAGE_TEMPLATE_STORAGE_KEY,
+  createUserPageTemplate,
   loadUserPageTemplates,
   type UserPageTemplate,
   type UserPageTemplateStorage,
@@ -122,6 +123,7 @@ export async function parseUserPageTemplateImportBytes(
         : 'マイテンプレートImportのschema versionが不正です。',
     );
   }
+
   const exportedAt = requiredDateString(manifest.exportedAt, 'Export日時');
   const sourceTemplate = validateTemplateCandidate(manifest.template);
   const entries = validateAssetEntries(
@@ -137,10 +139,9 @@ export async function parseUserPageTemplateImportBytes(
       manifestEnd + entry.offset + entry.byteLength,
     ),
   }));
-  const payloadStore = new ReadOnlyPayloadStore(payloads);
   const assets = await hydrateUserPageTemplateAssets(
     sourceTemplate.assets,
-    payloadStore,
+    new ReadOnlyPayloadStore(payloads),
   );
   const assetLibrary: ProjectAssetLibrary = {
     assets,
@@ -148,6 +149,20 @@ export async function parseUserPageTemplateImportBytes(
   };
 
   return { sourceTemplate, assetLibrary, exportedAt };
+}
+
+export function createLocalUserPageTemplateFromImport(input: {
+  readonly imported: ValidatedUserPageTemplateImport;
+  readonly templateId: string;
+  readonly createdAt: string;
+}): UserPageTemplate {
+  return createUserPageTemplate({
+    templateId: input.templateId,
+    name: input.imported.sourceTemplate.name,
+    page: input.imported.sourceTemplate.page,
+    assetLibrary: input.imported.assetLibrary,
+    createdAt: input.createdAt,
+  });
 }
 
 function validateTemplateCandidate(value: unknown): UserPageTemplate {
@@ -285,17 +300,17 @@ function requiredDateString(value: unknown, label: string): string {
 }
 
 function requiredNonNegativeSafeInteger(value: unknown, label: string): number {
-  if (!Number.isSafeInteger(value) || (value as number) < 0) {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
     throw new Error(`マイテンプレートImportの${label}が不正です。`);
   }
-  return value as number;
+  return value;
 }
 
 function requiredPositiveSafeInteger(value: unknown, label: string): number {
-  if (!Number.isSafeInteger(value) || (value as number) < 1) {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1) {
     throw new Error(`マイテンプレートImportの${label}が不正です。`);
   }
-  return value as number;
+  return value;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
