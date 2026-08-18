@@ -19,6 +19,7 @@ import {
 import {
   createLocalUserPageTemplateFromImport,
   parseUserPageTemplateImportBytes,
+  persistValidatedUserPageTemplateImport,
   readUserPageTemplateImportFile,
 } from '../src/user-page-template-import';
 import { persistUserPageTemplateAssetPayloads } from '../src/user-page-template-assets';
@@ -26,7 +27,12 @@ import type {
   UserPageTemplateAssetPayload,
   UserPageTemplateAssetPayloadStore,
 } from '../src/user-page-template-asset-payload-store';
-import { createUserPageTemplate } from '../src/user-page-templates';
+import {
+  createUserPageTemplate,
+  loadUserPageTemplates,
+  saveUserPageTemplate,
+  type UserPageTemplateStorage,
+} from '../src/user-page-templates';
 
 class MemoryPayloadStore implements UserPageTemplateAssetPayloadStore {
   private readonly values = new Map<string, Uint8Array>();
@@ -48,6 +54,22 @@ class MemoryPayloadStore implements UserPageTemplateAssetPayloadStore {
 
   async deleteMany(assetIds: readonly string[]): Promise<void> {
     for (const assetId of assetIds) this.values.delete(assetId);
+  }
+}
+
+class MemoryStorage implements UserPageTemplateStorage {
+  private readonly values = new Map<string, string>();
+
+  getItem(key: string): string | null {
+    return this.values.get(key) ?? null;
+  }
+
+  setItem(key: string, value: string): void {
+    this.values.set(key, value);
+  }
+
+  removeItem(key: string): void {
+    this.values.delete(key);
   }
 }
 
@@ -287,5 +309,38 @@ describe('マイPageテンプレートImport', () => {
     await expect(parseUserPageTemplateImportBytes(
       buildBundle(parsed.manifest, parsed.payload),
     )).rejects.toThrow('件数');
+  });
+
+  it('名前重複でmetadata保存に失敗した場合、既存templateを保持し未参照binaryを回収する', async () => {
+    const { file, library } = await createAssetExport();
+    const imported = await parseUserPageTemplateImportBytes(file.bytes);
+    const storage = new MemoryStorage();
+    const payloadStore = new MemoryPayloadStore();
+    const existing = createUserPageTemplate({
+      templateId: 'user-template:existing',
+      name: imported.sourceTemplate.name,
+      page: createPage({
+        id: 'existing-page',
+        projectId: 'existing-project',
+        name: imported.sourceTemplate.name,
+      }),
+      createdAt: '2026-08-18T01:00:00.000Z',
+    });
+    saveUserPageTemplate(storage, existing);
+
+    await expect(persistValidatedUserPageTemplateImport({
+      imported,
+      storage,
+      assetPayloadStore: payloadStore,
+      templateId: 'user-template:new-import',
+      createdAt: '2026-08-18T01:10:00.000Z',
+    })).rejects.toThrow('既に存在');
+
+    const reloaded = loadUserPageTemplates(storage);
+    expect(reloaded.templates).toHaveLength(1);
+    expect(reloaded.templates[0]?.id).toBe(existing.id);
+    expect(reloaded.templates[0]?.name).toBe(existing.name);
+    expect(await payloadStore.listAssetIds()).toEqual([]);
+    expect(library.assets).toHaveLength(1);
   });
 });
