@@ -2,6 +2,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type ChangeEvent,
   type CSSProperties,
   type FormEvent,
   type MouseEvent,
@@ -23,6 +24,7 @@ interface PageTemplateDialogProps {
   busy: boolean;
   currentPageName: string;
   canSaveCurrentPage: boolean;
+  canImportUserTemplate: boolean;
   saveDisabledReason: string | null;
   userTemplates: readonly UserPageTemplate[];
   userTemplateMessage: string | null;
@@ -31,6 +33,7 @@ interface PageTemplateDialogProps {
   onCreate(templateId: BuiltInPageTemplateId): void;
   onCreateUserTemplate(templateId: string): void;
   onSaveCurrentPage(name: string): void;
+  onImportUserTemplate(file: File): Promise<void>;
   onDeleteUserTemplate(templateId: string): void;
   onRestoreDeletedTemplate(): void;
 }
@@ -40,6 +43,7 @@ export function PageTemplateDialog({
   busy,
   currentPageName,
   canSaveCurrentPage,
+  canImportUserTemplate,
   saveDisabledReason,
   userTemplates,
   userTemplateMessage,
@@ -48,15 +52,18 @@ export function PageTemplateDialog({
   onCreate,
   onCreateUserTemplate,
   onSaveCurrentPage,
+  onImportUserTemplate,
   onDeleteUserTemplate,
   onRestoreDeletedTemplate,
 }: PageTemplateDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const firstTemplateRef = useRef<HTMLButtonElement>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const [templateName, setTemplateName] = useState(currentPageName);
   const [exportingTemplateId, setExportingTemplateId] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
-  const interactionBusy = busy || exportingTemplateId !== null;
+  const interactionBusy = busy || importing || exportingTemplateId !== null;
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -104,6 +111,20 @@ export function PageTemplateDialog({
       );
     } finally {
       setExportingTemplateId(null);
+    }
+  }
+
+  async function handleImportSelection(event: ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (file === undefined || interactionBusy || !canImportUserTemplate) return;
+
+    setImporting(true);
+    setExportMessage(null);
+    try {
+      await onImportUserTemplate(file);
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -214,18 +235,36 @@ export function PageTemplateDialog({
           <div className="page-template-section-heading">
             <div>
               <h3 id="user-template-heading">マイテンプレート</h3>
-              <p>自分で保存したPageを、別Projectや別Workspaceでも再利用・書き出しできます。</p>
+              <p>自分で保存したPageを、別Projectや別Workspaceでも再利用・入出力できます。</p>
             </div>
-            <button
-              type="button"
-              disabled={interactionBusy || !canRestoreDeleted}
-              onClick={() => {
-                setExportMessage(null);
-                onRestoreDeletedTemplate();
-              }}
-            >
-              削除を元に戻す
-            </button>
+            <div className="page-template-section-actions">
+              <input
+                ref={importInputRef}
+                className="page-template-file-input"
+                type="file"
+                accept=".liveboard-template"
+                disabled={interactionBusy || !canImportUserTemplate}
+                aria-label="マイテンプレートファイルを読み込む"
+                onChange={(event) => void handleImportSelection(event)}
+              />
+              <button
+                type="button"
+                disabled={interactionBusy || !canImportUserTemplate}
+                onClick={() => importInputRef.current?.click()}
+              >
+                読み込む
+              </button>
+              <button
+                type="button"
+                disabled={interactionBusy || !canRestoreDeleted}
+                onClick={() => {
+                  setExportMessage(null);
+                  onRestoreDeletedTemplate();
+                }}
+              >
+                削除を元に戻す
+              </button>
+            </div>
           </div>
           {userTemplates.length === 0 ? (
             <p className="page-template-empty">まだマイテンプレートはありません。</p>

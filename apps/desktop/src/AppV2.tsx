@@ -569,6 +569,16 @@ export function AppV2() {
     }
   }
 
+  async function importUserPageTemplate(file: File): Promise<void> {
+    if (pageTemplateBusy) return;
+    setPageTemplateBusy(true);
+    try {
+      if (await userPageTemplates.importFile(file)) setDomainError(null);
+    } finally {
+      setPageTemplateBusy(false);
+    }
+  }
+
   async function deleteUserPageTemplate(templateId: string): Promise<void> {
     if (pageTemplateBusy) return;
     setPageTemplateBusy(true);
@@ -1341,6 +1351,7 @@ export function AppV2() {
         busy={pageTemplateBusy}
         currentPageName={editPage.name}
         canSaveCurrentPage={userPageTemplates.enabled && userTemplateEligibility.allowed}
+        canImportUserTemplate={userPageTemplates.enabled}
         saveDisabledReason={userTemplateSaveDisabledReason}
         userTemplates={userPageTemplates.templates}
         userTemplateMessage={userPageTemplates.message}
@@ -1349,6 +1360,7 @@ export function AppV2() {
         onCreate={addPageFromTemplate}
         onCreateUserTemplate={addPageFromUserTemplate}
         onSaveCurrentPage={saveEditPageAsUserTemplate}
+        onImportUserTemplate={importUserPageTemplate}
         onDeleteUserTemplate={deleteUserPageTemplate}
         onRestoreDeletedTemplate={restoreDeletedUserPageTemplate}
       />

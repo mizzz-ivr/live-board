@@ -16,6 +16,10 @@ import {
   persistUserPageTemplateAssetPayloads,
 } from './user-page-template-assets';
 import { getBrowserUserPageTemplateAssetPayloadStore } from './user-page-template-asset-payload-store';
+import {
+  persistValidatedUserPageTemplateImport,
+  readUserPageTemplateImportFile,
+} from './user-page-template-import';
 
 export interface UserPageTemplateController {
   readonly enabled: boolean;
@@ -23,6 +27,7 @@ export interface UserPageTemplateController {
   readonly message: string | null;
   readonly canRestoreDeleted: boolean;
   savePage(page: Page, name: string, assetLibrary: ProjectAssetLibrary): Promise<boolean>;
+  importFile(file: File): Promise<boolean>;
   removeTemplate(templateId: string): Promise<boolean>;
   restoreDeletedTemplate(): Promise<boolean>;
 }
@@ -101,6 +106,46 @@ export function useUserPageTemplates(): UserPageTemplateController {
     }
   }), [runSerialized]);
 
+  const importFile = useCallback(
+    (file: File): Promise<boolean> => runSerialized(async () => {
+      try {
+        const imported = await readUserPageTemplateImportFile(file);
+        const storage = browserStorage();
+        const assetPayloadStore = getBrowserUserPageTemplateAssetPayloadStore();
+        await garbageCollectCurrentStoreBestEffort();
+
+        const persisted = await persistValidatedUserPageTemplateImport({
+          imported,
+          storage,
+          assetPayloadStore,
+          templateId: `user-template:${globalThis.crypto.randomUUID()}`,
+          createdAt: new Date().toISOString(),
+        });
+        const gcWarning = await garbageCollectCurrentStore().catch(() =>
+          '不要なAssetバイナリの整理に失敗しました。',
+        );
+        setState({
+          enabled: true,
+          templates: persisted.result.templates,
+          lastDeletedTemplate: persisted.result.lastDeletedTemplate,
+          message: [
+            `「${persisted.template.name}」を読み込みました。Asset ${persisted.template.assets.length}件。`,
+            ...persisted.result.warnings,
+            ...(gcWarning === undefined ? [] : [gcWarning]),
+          ].join(' '),
+        });
+        return true;
+      } catch (error: unknown) {
+        setState((current) => ({
+          ...current,
+          message: errorMessage(error, 'マイテンプレートの読み込みに失敗しました。'),
+        }));
+        return false;
+      }
+    }),
+    [runSerialized],
+  );
+
   const removeTemplate = useCallback(
     (templateId: string): Promise<boolean> => runSerialized(async () => {
       try {
@@ -166,6 +211,7 @@ export function useUserPageTemplates(): UserPageTemplateController {
     message: state.message,
     canRestoreDeleted: state.lastDeletedTemplate !== null,
     savePage,
+    importFile,
     removeTemplate,
     restoreDeletedTemplate,
   };
