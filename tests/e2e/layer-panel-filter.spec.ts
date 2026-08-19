@@ -51,3 +51,26 @@ test('Layer種類と表示状態を組み合わせて絞り込み、解除でき
   await expect(tree.getByRole('treeitem')).toHaveCount(2);
   await expect(page.getByRole('button', { name: '絞り込みを解除' })).toBeDisabled();
 });
+
+test('結合対象が絞り込み外にある場合は選択結合を抑止する', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas-surface')).toBeVisible();
+
+  await page.getByRole('button', { name: 'ラスター', exact: true }).click();
+  await page.getByRole('button', { name: 'テキスト', exact: true }).click();
+
+  await page.getByLabel('ラスター 1を結合対象に選択').check();
+  await page.getByLabel('テキスト 2を結合対象に選択').check();
+
+  const mergeButton = page.getByRole('button', { name: '選択を結合' });
+  await expect(mergeButton).toBeEnabled();
+
+  await page.getByLabel('レイヤー種類').selectOption('text');
+  await expect(mergeButton).toBeDisabled();
+  await expect(
+    page.getByRole('status').filter({ hasText: '結合対象1件が絞り込み外' }),
+  ).toBeVisible();
+
+  await page.getByRole('button', { name: '絞り込みを解除' }).click();
+  await expect(mergeButton).toBeEnabled();
+});
