@@ -30,6 +30,11 @@ import {
   type RasterLayer,
 } from '@live-board/domain';
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
+import {
+  filterLayersForPanel,
+  type LayerTypeFilter,
+  type LayerVisibilityFilter,
+} from './layer-panel-filter.js';
 import './layer-panel.css';
 
 interface LayerPanelProps {
@@ -71,6 +76,10 @@ export function LayerPanel({
       ? null
       : document.layers.find((layer) => layer.id === document.activeLayerId) ?? null;
   const [selectedLayerIds, setSelectedLayerIds] = useState<LayerId[]>([]);
+  const [layerQuery, setLayerQuery] = useState('');
+  const [layerTypeFilter, setLayerTypeFilter] = useState<LayerTypeFilter>('all');
+  const [layerVisibilityFilter, setLayerVisibilityFilter] =
+    useState<LayerVisibilityFilter>('all');
 
   useEffect(() => {
     setSelectedLayerIds([]);
@@ -80,6 +89,11 @@ export function LayerPanel({
     () => orderedLayers.filter((layer) => layer.type === 'folder'),
     [orderedLayers],
   );
+  const filterResult = filterLayersForPanel(orderedLayers, {
+    query: layerQuery,
+    type: layerTypeFilter,
+    visibility: layerVisibilityFilter,
+  });
   const history = getLayerHistory(state, page.id);
 
   function execute(command: LayerCommand): void {
@@ -183,11 +197,21 @@ export function LayerPanel({
     setSelectedLayerIds([]);
   }
 
+  function clearFilters(): void {
+    setLayerQuery('');
+    setLayerTypeFilter('all');
+    setLayerVisibilityFilter('all');
+  }
+
   return (
     <section className="layer-panel">
       <div className="panel-heading">
         <h2>レイヤー</h2>
-        <span>{document.layers.length}件</span>
+        <span>
+          {filterResult.isActive
+            ? `${filterResult.matchCount} / ${document.layers.length}件`
+            : `${document.layers.length}件`}
+        </span>
       </div>
 
       <div className="layer-type-actions" aria-label="レイヤー追加">
@@ -215,11 +239,70 @@ export function LayerPanel({
         </button>
       </div>
 
+      <div className="layer-filters" aria-label="レイヤー検索・絞り込み">
+        <label className="layer-search-field">
+          名前検索
+          <input
+            type="search"
+            value={layerQuery}
+            placeholder="レイヤー名を検索"
+            onChange={(event) => setLayerQuery(event.currentTarget.value)}
+          />
+        </label>
+        <div className="layer-filter-selects">
+          <label>
+            種類
+            <select
+              aria-label="レイヤー種類"
+              value={layerTypeFilter}
+              onChange={(event) =>
+                setLayerTypeFilter(event.currentTarget.value as LayerTypeFilter)
+              }
+            >
+              <option value="all">すべて</option>
+              {LAYER_TYPES.map(({ type, label }) => (
+                <option key={type} value={type}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            表示状態
+            <select
+              aria-label="レイヤー表示状態"
+              value={layerVisibilityFilter}
+              onChange={(event) =>
+                setLayerVisibilityFilter(
+                  event.currentTarget.value as LayerVisibilityFilter,
+                )
+              }
+            >
+              <option value="all">すべて</option>
+              <option value="visible">表示</option>
+              <option value="hidden">非表示</option>
+            </select>
+          </label>
+        </div>
+        <div className="layer-filter-footer">
+          <span role="status" aria-live="polite">
+            {filterResult.isActive
+              ? `${filterResult.matchCount}件一致 / 全${document.layers.length}件`
+              : `全${document.layers.length}件`}
+          </span>
+          <button type="button" disabled={!filterResult.isActive} onClick={clearFilters}>
+            絞り込みを解除
+          </button>
+        </div>
+      </div>
+
       <div className="layer-list" role="tree" aria-label="レイヤーツリー">
         {orderedLayers.length === 0 ? (
           <div className="empty-panel">レイヤーはありません</div>
+        ) : filterResult.layers.length === 0 ? (
+          <div className="empty-panel">条件に一致するレイヤーはありません</div>
         ) : (
-          orderedLayers.map((layer) => {
+          filterResult.layers.map((layer) => {
             const active = layer.id === document.activeLayerId;
             const selected = selectedLayerIds.includes(layer.id);
             return (
