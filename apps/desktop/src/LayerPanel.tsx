@@ -94,6 +94,10 @@ export function LayerPanel({
     type: layerTypeFilter,
     visibility: layerVisibilityFilter,
   });
+  const visibleLayerIds = new Set(filterResult.layers.map((layer) => layer.id));
+  const hiddenSelectedLayerCount = selectedLayerIds.filter(
+    (id) => !visibleLayerIds.has(id),
+  ).length;
   const history = getLayerHistory(state, page.id);
 
   function execute(command: LayerCommand): void {
@@ -289,6 +293,9 @@ export function LayerPanel({
             {filterResult.isActive
               ? `${filterResult.matchCount}件一致 / 全${document.layers.length}件`
               : `全${document.layers.length}件`}
+            {hiddenSelectedLayerCount > 0
+              ? ` ・ 結合対象${hiddenSelectedLayerCount}件が絞り込み外`
+              : ''}
           </span>
           <button type="button" disabled={!filterResult.isActive} onClick={clearFilters}>
             絞り込みを解除
@@ -558,7 +565,7 @@ export function LayerPanel({
         </button>
         <button
           type="button"
-          disabled={selectedLayerIds.length < 2}
+          disabled={selectedLayerIds.length < 2 || hiddenSelectedLayerCount > 0}
           onClick={() => merge(selectedLayerIds, '選択レイヤーを結合')}
         >
           選択を結合
